@@ -117,6 +117,29 @@ export function promiseIn(text: string): string | null {
   return text.match(PROMISE)?.[0] ?? null;
 }
 
+export type Resolution = { action: 'give_back' | 'keep'; ref: string; amount: string; total: string; kept: string; reasons: string[] };
+type ReviewedLine = { ref: string; quantity: string; rate: string; review: { verdict: string }; override: string | null };
+const centsOf = (l: { quantity: string; rate: string }) => Math.round(Number(l.quantity) * Number(l.rate) * 100);
+const usd = (cents: number) => (cents / 100).toFixed(2);
+
+/**
+ * What the app suggests the freelancer do about a questioned line, beside the drafted reply. Two signals decide it,
+ * neither of them the reply's wording: the second model's review of the line before it was sent, and whether the
+ * reply agent found a quote in the line's own entry. Either one against the line suggests giving back that line
+ * alone. The amounts are the app's arithmetic on the approved lines, never a model's. It is a suggestion: the refund
+ * or correction still needs the freelancer's click.
+ */
+export function suggestResolution(line: ReviewedLine, lines: ReviewedLine[], drafted: { quote: string | null }, refunded: string[] = []): Resolution {
+  // `refunded` holds the amounts of refunds already made on this payment; they no longer stay paid.
+  const amount = centsOf(line), total = lines.reduce((sum, l) => sum + centsOf(l), 0) - refunded.reduce((sum, value) => sum + Math.round(Number(value) * 100), 0);
+  const against = [
+    line.review.verdict === 'supports' ? '' : `The AI review ${line.review.verdict === 'disputes' ? 'disputed' : 'could not confirm'} this line before it was sent${line.override ? '; it was kept on your reason' : ''}.`,
+    drafted.quote ? '' : 'Its own log entry does not answer the client\'s question.',
+  ].filter(Boolean);
+  const reasons = against.length ? against : ['The AI review agreed with this line, and its own log entry answers the question.'];
+  return { action: against.length ? 'give_back' : 'keep', ref: line.ref, amount: usd(amount), total: usd(total), kept: usd(total - amount), reasons };
+}
+
 /** Without a model key the draft is the line's own work quote, labelled as such. */
 export function fallbackAnswer(line: AnswerLine): DraftedAnswer {
   return { text: `The work log entry behind ${line.ref} reads: "${line.work_quote}".`, quote: line.work_quote, grounded: true, model: null, note: null, warnings: [] };

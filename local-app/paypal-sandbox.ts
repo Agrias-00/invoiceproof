@@ -11,6 +11,9 @@ export type SandboxCreateResult = CreateReceipt | { kind: 'unknown'; reason: str
 type Options = { clientId: string; clientSecret: string; baseUrl?: string; fetch?: typeof globalThis.fetch; timeoutMs?: number };
 /** One invoice item as this app writes it: the line's description is the item name; `description` carries its quotes. */
 export type InvoiceItem = { name: string; description: string; quantity: string; rate: string };
+/** The note PayPal holds on a refund, as PayPal returns it; absent when the reply carries none. */
+const noteOf = (data: any): { note?: string } => typeof data?.note_to_payer === 'string' && data.note_to_payer ? { note: data.note_to_payer.slice(0, 255) } : {};
+
 export class SandboxPayPal {
   private clientId: string;
   private clientSecret: string;
@@ -145,22 +148,22 @@ export class SandboxPayPal {
    * lost reply is retried with the id the caller saved before the first call. Throws REFUND_REFUSED on a 4xx (nothing
    * was refunded; `issue` says why) and REFUND_UNKNOWN when it may have been.
    */
-  async refundCapture(captureId: string, amount: string, requestId: string, noteToPayer: string): Promise<{ id: string; status: string; amount: string }> {
+  async refundCapture(captureId: string, amount: string, requestId: string, noteToPayer: string): Promise<{ id: string; status: string; amount: string; note?: string }> {
     if (!/^[A-Z0-9]{8,32}$/.test(captureId) || !/^\d{1,12}\.\d{2}$/.test(amount) || Number(amount) <= 0 || !/^[0-9a-f-]{36}$/.test(requestId)) throw new Error('Invalid refund');
     const response = await this.api(`/v2/payments/captures/${captureId}/refund`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'PayPal-Request-Id': requestId, Prefer: 'return=representation' }, body: JSON.stringify({ amount: { currency_code: 'USD', value: amount }, note_to_payer: noteToPayer.slice(0, 255) }) }).catch(() => null);
     if (!response) throw new Error('REFUND_UNKNOWN');
     const data: any = await response.json().catch(() => null);
     if (response.status >= 400 && response.status < 500 && response.status !== 429) throw Object.assign(new Error('REFUND_REFUSED'), { issue: typeof data?.details?.[0]?.issue === 'string' ? data.details[0].issue : null });
     if (!response.ok || typeof data?.id !== 'string' || typeof data?.status !== 'string') throw new Error('REFUND_UNKNOWN');
-    return { id: data.id, status: data.status, amount: typeof data.amount?.value === 'string' ? data.amount.value : amount };
+    return { id: data.id, status: data.status, amount: typeof data.amount?.value === 'string' ? data.amount.value : amount, ...noteOf(data) };
   }
   /** Reads a refund's current status, for one PayPal reported as PENDING. Throws REFUND_UNKNOWN when unread. */
-  async readRefund(refundId: string): Promise<{ id: string; status: string; amount: string | null }> {
+  async readRefund(refundId: string): Promise<{ id: string; status: string; amount: string | null; note?: string }> {
     if (!/^[A-Z0-9]{8,32}$/.test(refundId)) throw new Error('Invalid refund');
     const response = await this.api(`/v2/payments/refunds/${refundId}`, { method: 'GET' }).catch(() => null);
     const data: any = response?.ok ? await response.json().catch(() => null) : null;
     if (typeof data?.id !== 'string' || typeof data?.status !== 'string') throw new Error('REFUND_UNKNOWN');
-    return { id: data.id, status: data.status, amount: typeof data.amount?.value === 'string' ? data.amount.value : null };
+    return { id: data.id, status: data.status, amount: typeof data.amount?.value === 'string' ? data.amount.value : null, ...noteOf(data) };
   }
   async generateQrCode(remoteId: string): Promise<Buffer> {
     if (!/^INV2-[A-Z0-9-]{1,80}$/.test(remoteId)) throw new Error('Invalid invoice');

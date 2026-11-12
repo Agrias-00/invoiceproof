@@ -1,24 +1,31 @@
 # InvoiceProof
 
-**A client questions one line, not the whole invoice. The freelancer keeps
-the other USD 196 and refunds only that line on PayPal, with the log entry as
+For freelancers who bill hours through PayPal, and the clients who pay them.
+
+**A client questions one hour on one line, not the whole invoice. The freelancer keeps
+USD 246 and refunds only that hour on PayPal, with the question as
 the reason both sides see.**
 
 A freelance designer sends a USD 296 invoice that an AI drafted from the
-week's work log. The AI review flagged two hours the log calls "mostly waiting
-for the client's feedback". The designer judged them billable ("revisions the
-client asked for") and kept them, with that reason shown to the client. The
-client pays by card on PayPal's own page, then questions that one line.
+week's work log. The AI review flagged a design line: the log says one of its two hours was "talking
+the client through them on a call". The designer judged it billable ("the call walked the
+client through these revisions") and kept it, with that reason shown to the client. The
+client pays by card on PayPal's own page, then questions the hour on the call: no rate was agreed for it.
 
 **Before:** an e-mail thread, a manual refund, or a chargeback that puts all
 USD 296 at stake. **With InvoiceProof:** the client sees the line beside the
 log entry it came from, the designer answers from the same log and refunds
-that USD 100 line on the payment, and PayPal's own page says "Partially
-refunded". USD 196 stays paid and no dispute is opened.
+that one hour (USD 50) on the payment, and PayPal's own page says "Partially
+refunded". USD 246 stays paid and no dispute is opened.
+
+What the run shows is the line refund and PayPal's own read-back of it. That
+settling one line this way keeps clients from opening disputes is the reason
+for the design, not a measured result: the data is synthetic and no real
+client used it.
 
 | Before PayPal: a fee the price list does not have is blocked | After payment: the client's proof page | PayPal agrees |
 |---|---|---|
-| ![A rush-fee line struck out as blocked, because no price-list entry supports it](docs/screens/1-blocked-before-paypal.png) | ![Proof page: USD 296 paid, USD 100 refunded for the questioned line, USD 196 kept, and PayPal's read-back matching](docs/screens/2-client-proof-page.png) | ![PayPal's hosted invoice page marked Partially refunded, USD 296 paid and USD 100 refunded](docs/screens/3-paypal-partially-refunded.png) |
+| ![A rush-fee line struck out as blocked, because no price-list entry supports it](docs/screens/1-blocked-before-paypal.png) | ![Proof page: USD 296 paid, USD 50 refunded for 1 of 2 hours on the questioned line, USD 246 kept, and PayPal's read-back matching](docs/screens/2-client-proof-page.png) | ![PayPal's hosted invoice page marked Partially refunded, USD 296 paid and USD 50 refunded](docs/screens/3-paypal-partially-refunded.png) |
 
 Screens from the demo video (sandbox, synthetic data). A fourth,
 [an invoice edited on PayPal outside the app](docs/screens/4-paypal-changed-outside.png),
@@ -42,8 +49,11 @@ try it: see [Try it without any account](#try-it-without-any-account).
 4. **The client can question one line, even after paying.** The freelancer's
    reply is drafted from the same log, and the line is corrected on the open
    invoice or, once paid, refunded on the PayPal payment (Payments API v2).
-   If PayPal's answer is lost, the retry resends the same PayPal-Request-Id
-   and PayPal returns the refund it already made instead of a second one.
+   The app suggests which it should be (give back that line alone, or keep
+   it) from the review already on record, with its own sums; the freelancer
+   clicks. If PayPal's answer is lost, the retry resends the same
+   PayPal-Request-Id and PayPal returns the refund it already made instead of
+   a second one, for as long as PayPal remembers the id.
 
 PayPal sandbox only, synthetic data. The app sends the invoice through the
 PayPal API without PayPal's e-mail (`send_to_recipient: false`). In the demo
@@ -66,6 +76,56 @@ flowchart LR
 The proof page repeats the invoice read on every load; a create that times
 out is found again by invoice number (`POST /v2/invoicing/search-invoices`).
 
+
+## How it differs from what exists
+
+| | A PayPal invoice and refund on their own | A chat model drafting the invoice | InvoiceProof |
+|---|---|---|---|
+| Where a line comes from | Typed by the sender; no source kept | The model's output, unchecked | Quoted word for word from the work log and price list; the app finds each quote and number itself |
+| A line the sources do not support | Sent as typed | Sent if the person misses it | Blocked before PayPal (no quote, or numbers not in the quote), or flagged by a second model |
+| The client doubts one line | E-mail, or a dispute on the payment | Outside the tool | A question on that line, beside its source, answered from the same log |
+| Giving the line back | A refund with an amount and a free-text note | Outside the tool | Exactly that line's amount on the PayPal payment; PayPal's refund note names the line and the reason |
+| PayPal's reply is lost | The caller decides whether to retry | Outside the tool | The saved request id is resent and the outcome is read back from PayPal |
+
+The first two columns describe the plain workflows, not a named product. The
+third column is what this repository's tests and sandbox runs exercise.
+
+By name (pages read 2026-11-12):
+
+| Product | What it does with a questioned line | What is missing |
+|---|---|---|
+| [PayPal refund](https://www.paypal.com/us/cshelp/article/how-do-i-issue-a-refund-help101) | Full or partial refund within 180 days: an amount and a note | Tied to no invoice line; the client sees no reason for the line |
+| [PayPal Invoicing API, record refund](https://developer.paypal.com/api/invoicing/v2/invoices-refunds) | Marks the invoice refunded or partially refunded | An amount on the invoice, not a line |
+| [Stripe Invoicing credit notes](https://docs.stripe.com/invoicing/dashboard/credit-notes) | Credits a line item's quantity or amount, with a reason. The closest thing to this idea | Stripe only; the customer is not shown where the line came from |
+| Chargeback-response guides and services such as [Chargeflow](https://chargeflow.io/blog/winning-paypal-chargebacks) | Help the seller send evidence once a claim or chargeback exists | The whole payment is already at stake |
+
+What is new here is the three together: the refund belongs to one invoice line
+on PayPal, both sides read the evidence for that line before a dispute exists,
+and the AI review that ran before sending decides what the app suggests after
+payment.
+
+### Why it matters
+
+- 71% of freelancers have had trouble collecting a payment at some point; the
+  average unpaid amount in one year was USD 5,968
+  ([Freelancers Union, "The Costs of Nonpayment"](https://onlabor.org/wp-content/uploads/2017/05/FU_NonpaymentReport_r3.pdf), 5,358 surveyed).
+- 62% of New York freelancers have lost wages to a client who refused to pay
+  ([Authors Guild and six other groups, 2022](https://authorsguild.org/news/survey-finds-62-percent-of-ny-freelance-workers-have-lost-wages-due-to-nonpayment)).
+- PayPal charges the seller a Dispute Fee when a disagreement becomes a claim
+  or a chargeback, and waives it when buyer and seller settle first
+  ([PayPal help](https://www.paypal.com/us/cshelp/article/what-is-the-paypal-dispute-fee-and-why-was-i-charged-one-help349)).
+
+These surveys are about non-payment in general; this project has not measured
+how often one questioned line becomes a dispute.
+
+### What the checks stop, in money
+
+On the 10 work logs of `local-app/draft-cases.json`, run three times, the
+drafting model produced 48 lines worth USD 5,703. Six of them (USD 525, 9%)
+had no support: a rush fee the price list does not have, and waiting billed as
+design work. Without the checks all six go on the invoice. With them all six
+were stopped and no supported line was (`local-app/draft-eval-results.json`).
+Synthetic cases; a test result, not a rate.
 
 ## Who it is for
 
@@ -129,11 +189,13 @@ are drafted again from the new text. An approval names the draft it reviewed,
 and the server refuses it when a later draft has replaced that one.
 
 The second example is a log as a freelancer writes it: a rush fee the price
-list does not have, and two hours of design "mostly waiting for the client's
-feedback on the call". In every run we made (2026-11-10, default models) the model drafted a
-rush-fee line with no price quote, and the app blocked it; the waiting-time
+list does not have, and two hours of design, "1 hour of it talking the client through them
+on a call". In the runs we made on 2026-11-12 (default models) the model drafted a
+rush-fee line with no price quote, and the app blocked it; the client-call
 line passed the quote check, because its words and numbers are in the texts,
-and the review disputed it as time not spent working.
+and the review disputed it as a call billed at the design rate in 4 of 5 runs; in the fifth the
+recorder stopped because the review had not singled out that line. The disputed line is a judgment
+call, not an error: the work was done, and the price list has no rate for a call.
 
 ### How often the review is right
 
@@ -169,8 +231,34 @@ After the fixes the set was run three times (`--runs 3`, 2026-11-10): 30 of
 30, every case passing in all three runs, cost USD 0.13. A line the review
 did not answer counts as a failure, and the review receives the log line the
 quote check found, not the first one with the same words. Both injected
-instructions produced no line. Thirty runs of ten synthetic cases are not a
+instructions produced no line. Three runs of ten synthetic cases (30 case results) are not a
 rate for real logs. Results: `local-app/draft-eval-results.json`.
+
+### The suggested resolution
+
+When the reply is drafted, the app also suggests what to do with the line
+itself (`suggestResolution` in `local-app/answer-question.ts`): give back
+that line alone, or keep it. Two signals decide, neither of them the reply's
+wording: the second model's review of the line before it was sent, and
+whether the reply agent found a quote in the line's own log entry. Either one
+against the line suggests giving it back. The sums on the card (the line's
+amount, and what stays paid) are the app's arithmetic on the approved lines
+less the refunds already recorded, never a model's. A line already refunded
+gets no suggestion. It is a suggestion: on a paid invoice it highlights the
+refund button, and nothing reaches PayPal until the freelancer clicks. In the
+demo the review had disputed the client-call line before sending, so the
+card reads "Suggested: refund L5 only", USD 100.00 back and USD 196.00 of
+USD 296.00 staying paid. The freelancer then gave back only the hour on the call: 1 of 2, USD 50.00.
+When the freelancer types a smaller quantity, the card adds those sums under the suggestion
+("Your choice: 1 of 2 · USD 50.00 back to the client · USD 246.00 of USD 296.00 stays paid").
+
+The freelancer can give back part of the line instead: a quantity above zero
+and below the line's, priced at the line's own rate (one of two hours at
+USD 50 is USD 50.00). PayPal's refund note then reads "L5 … (1 of 2): reason",
+and the client's page says "Refunded 1 of 2". After the refund the card shows
+the note as PayPal holds it, read back from PayPal's refund record
+(`GET /v2/payments/refunds/{id}`), so the line and the reason are visibly on
+PayPal's side and not only in this app.
 
 ### The reply agent
 
@@ -204,7 +292,9 @@ The held-out set (`answer-holdout-cases.json`: 3 answerable, 3 unanswerable,
 2 injections, 2 about other lines; written before any run, never tuned
 against) scored 9 of 10 on its first run, where the miss answered correctly
 but also cited a call from another entry, and 9 of 10 after the rule, where
-the miss wrote "my mistake", a phrase the checks forbid. Results (latest run):
+the miss wrote "my mistake", a phrase the checks forbid. That reply said it
+could not tell whether the bugs were its mistake: a denial, caught because the
+rule matches the phrase as a substring. The result is left as scored. Results (latest run):
 `local-app/answer-holdout-results.json`.
 
 ## Try it without any account
@@ -221,7 +311,7 @@ node local-app/start.ts ledger.sqlite 4300
 Open the address it prints and load an example. With no keys set:
 
 - "Draft lines" on one of the two examples uses the reply the model gave for
-  that example on 2026-11-10, and the review that model gave, stored in
+  that example (on 2026-11-10 or 2026-11-12; the page shows the date), and the review that model gave, stored in
   `local-app/recorded-replies.ts`. The page says the replies are recorded.
   The quote checks run for real, so the rush-fee line is blocked in front of
   you. Your own text needs the model key.
@@ -247,6 +337,16 @@ node local-app/start.ts ledger.sqlite 4300
 Keys are read from the environment only; the app reads and writes no key file.
 Use sandbox keys: the PayPal host is the constant
 `https://api-m.sandbox.paypal.com` and the app refuses any other.
+
+**What costs money, and what does not.** The no-account run above and the
+whole test suite (`sh verify.sh`) are free. A PayPal sandbox account and its
+test cards are free. The only paid part is the live model call on your own
+text, about one US cent per draft. To avoid that, point the app at any
+OpenAI-compatible chat endpoint you already have, such as a local model
+server: set `INVOICEPROOF_LLM_URL` and `INVOICEPROOF_LLM_KEY`, and name its
+models with `INVOICEPROOF_MODEL`, `INVOICEPROOF_AUDIT_MODEL` and
+`INVOICEPROOF_ANSWER_MODEL`. We tested only the default models, so results
+with other models are not measured.
 
 The model key needs an openrouter.ai account with credit on it. Tests and evaluations
 never use it: live model tests (`INVOICEPROOF_LIVE_MODEL=1`) and the `*-eval.ts` scripts
@@ -337,18 +437,26 @@ the line was already refunded, or when the amount exceeds what is left to
 refund. The refund is saved as pending with its own `PayPal-Request-Id` first.
 A lost reply is settled by sending the same id again: PayPal returns the refund
 it already made instead of a second one (measured in the sandbox, 2026-11-10:
-201, then 200 with the same refund id). A refusal clears the pending refund; an
+201, then 200 with the same refund id). That holds only while PayPal remembers
+the id: its API requests guide gives up to 45 days for a refund. The app stops
+resending a staged refund after 30 days (`REFUND_RETRY_DAYS`) and asks for
+the payment to be checked in PayPal instead. The freelancer then settles it on
+the same card: with a refund id PayPal lists on this invoice, which the app reads back and
+accepts only for the staged amount, or by stating that no refund was made,
+which the app accepts only when PayPal's refunded total holds nothing the proof
+has not recorded. A refusal clears the pending refund; an
 unknown outcome keeps it and blocks revoking the proof.
 
 The proof page then shows the refund beside the line with PayPal's refund id,
 and PayPal's own paid and refunded totals. In the sandbox run of 2026-11-10, a
 guest paid USD 296.00 by test card on PayPal's invoice page, the USD 100.00
-waiting-time line was refunded, and PayPal read the invoice back as
-`PARTIALLY_REFUNDED`. PayPal's own refund record carries the line and
+waiting-time line of that run was refunded, and PayPal read the invoice back as
+`PARTIALLY_REFUNDED`. In the run of 2026-11-12 shown in the video, 1 of 2 hours on the
+client-call line (USD 50.00) was refunded and USD 246.00 stayed paid. PayPal's own refund record carries the line and
 the reason in its note, beside its invoice id
 ([docs/paypal-refund-record.md](docs/paypal-refund-record.md)); how PayPal
 shows that note to a payer was not checked, since the demo payer is a guest.
-`demo/flow.mjs --paid` repeats the run;
+`demo/flow.mjs --paid` repeats the 2026-11-10 run (a whole-line refund) and `demo/record.mjs` the partial one;
 `demo/guest-pay.mjs` pays as a guest with a generated, Luhn-valid sandbox test
 card and a synthetic US address, and only against `sandbox.paypal.com`.
 
@@ -370,8 +478,8 @@ replayable offline at `/lab`, linked from the page footer.
 - The proof page is served by the freelancer's app; the client must be able
   to reach it. The token in its address is the only access control, and the
   freelancer can revoke it. The demo payment is a sandbox test card.
-- A refund is limited to a paid invoice with one payment, refunded one whole
-  line at a time.
+- A refund is limited to a paid invoice with one payment, one refund per line:
+  the whole line, or a smaller quantity of it at the line's own rate.
 - The description is free text. The person may reword it; it is not checked.
 - Numbers are compared by value ("50" equals "50.00"). A quantity may be
   written as a count word up to twelve ("two hours"); a rate must be written

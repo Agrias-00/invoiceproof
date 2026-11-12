@@ -7,8 +7,8 @@ import { recordedReplyFor, recordedReviewsFor } from './recorded-replies.ts';
 import { auditLines, sourceLine } from './audit-lines.ts';
 import type { Review } from './audit-lines.ts';
 type Billed = { invoice_number: string; ref: string; created_at: string };
-import { draftAnswer, groundedQuote, quoteOnLine } from './answer-question.ts';
-import { ProofStore, TOKEN, compare, fingerprint, totalOf } from './proof-store.ts';
+import { draftAnswer, groundedQuote, quoteOnLine, suggestResolution } from './answer-question.ts';
+import { ProofStore, TOKEN, compare, fingerprint, totalOf, refundRetryExpired } from './proof-store.ts';
 import type { Proof, ProofLine } from './proof-store.ts';
 import { invoiceNumberFor } from './paypal-contract.ts';
 import type { SandboxPayPal } from './paypal-sandbox.ts';
@@ -393,7 +393,12 @@ export async function startLocalApp(options: Options) {
             const line = questionedLine(proof, question.ref);
             try {
               const drafted = await (options.answer ?? draftAnswer)({ question: question.note, line, sources: sourcesOf(proof) });
-              json(200, drafted);
+              // Beside the reply, the app suggests what to do with the line itself, from the review it already holds.
+              // A line already removed from the invoice has nothing left to give back.
+              // A line already refunded has nothing left either, and earlier refunds are taken off what stays paid.
+              const refunds = proof.refunds ?? [];
+              const current = refunds.some(r => r.ref === question.ref) ? undefined : proof.lines.find(l => l.ref === question.ref);
+              json(200, { ...drafted, resolution: current ? suggestResolution(current, proof.lines, drafted, refunds.map(r => r.amount)) : null });
             } catch (error) { json(502, { errorCode: (error as Error).message === 'MODEL_OUTPUT_NOT_JSON' ? 'MODEL_REPLY_INVALID' : 'MODEL_REQUEST_FAILED' }); }
             return;
           }
@@ -414,7 +419,8 @@ export async function startLocalApp(options: Options) {
           if (action === 'refund') {
             // After payment the freelancer gives a line back, usually one the client questioned and the sources do not
             // support: exactly its amount is refunded on the client's PayPal payment. The invoice items stay as paid.
-            object(input, ['ref', 'reason']);
+            // The two settle fields are optional and only read for a staged refund outside the retry window.
+            object(input, ['ref', 'reason', ...(input && typeof input === 'object' ? ['refund_id', 'not_refunded', 'quantity'].filter(key => key in input) : [])]);
             const proof = proofs.live(token!); if (!proof) throw new InputError(404, 'Not found.');
             if (!options.paypal || !proof.remote_id) { json(409, { errorCode: 'REFUND_NEEDS_PAYPAL' }); return; }
             if (revising.has(proof.token)) { json(409, { errorCode: 'REVISION_IN_PROGRESS' }); return; }
@@ -433,17 +439,47 @@ export async function startLocalApp(options: Options) {
                 if (compare(proof, read).state !== 'match') { json(409, { errorCode: 'INVOICE_CHANGED_ELSEWHERE' }); return; }
                 const captures = (read.paid?.transactions ?? []).filter(t => t.payment_id);
                 if (!read.paid || captures.length !== 1 || read.paid.transactions.length !== 1) { json(409, { errorCode: 'PAYMENT_NOT_REFUNDABLE' }); return; }
-                const amount = totalOf([line]);
+                // Part of a line can be given back: a quantity above zero and below the line's, priced at the line's own rate.
+                const part = input.quantity === undefined || Number(input.quantity) === Number(line.quantity) ? null : input.quantity;
+                if (part !== null) expect(typeof part === 'string' && /^\d{1,6}(\.\d{1,2})?$/.test(part) && Number(part) > 0 && Number(part) < Number(line.quantity), 'The quantity to give back must be above zero and at most the quantity of the line.');
+                const amount = totalOf([part === null ? line : { ...line, quantity: part as string }]);
                 if (cents(amount) <= 0 || cents(amount) > cents(read.paid.value) - cents(read.refunded?.value ?? '0')) { json(409, { errorCode: 'REFUND_EXCEEDS_PAID' }); return; }
-                pending = proofs.stageRefund(proof.token, { ref: line.ref, reason: (input.reason as string).trim(), amount, request_id: randomUUID(), capture_id: captures[0]!.payment_id! });
+                pending = proofs.stageRefund(proof.token, { ref: line.ref, reason: (input.reason as string).trim(), amount, request_id: randomUUID(), capture_id: captures[0]!.payment_id!, ...(part === null ? {} : { quantity: part as string }) });
               } else if (pending.ref !== input.ref) { json(409, { errorCode: 'REFUND_UNCONFIRMED', ref: pending.ref }); return; }
+              // A refund already held by its PayPal id is only read back, and a settlement outside the retry window sends
+              // nothing to PayPal: only those two skip the amount check.
+              else if (!pending.refund_id && !(refundRetryExpired(pending) && (typeof input.refund_id === 'string' || input.not_refunded === true))) {
+                // A retry sends the staged amount, so the click must have confirmed that amount: a different quantity is refused, not ignored.
+                const staged = proof.lines.find(l => l.ref === pending!.ref)!;
+                const asked = input.quantity === undefined || Number(input.quantity) === Number(staged.quantity) ? null : Number(input.quantity);
+                if (asked !== (pending.quantity ? Number(pending.quantity) : null)) { json(409, { errorCode: 'REFUND_STAGED_DIFFERS', amount: pending.amount, quantity: pending.quantity ?? null }); return; }
+              }
               // A staged refund is sent again with its saved request id: PayPal answers with the refund it already made, if any.
               const line = proof.lines.find(l => l.ref === pending!.ref)!;
               // A refund PayPal already accepted is read back by its id instead of being requested again.
-              let refund: { id: string; status: string };
+              let refund: { id: string; status: string; note?: string };
+              // Outside PayPal's request-id window a resend could refund twice, so it is not sent (see REFUND_RETRY_DAYS).
+              // A person settles it from PayPal instead: with the refund id PayPal shows, which is read back and must carry
+              // the staged amount, or by saying no refund was made, which PayPal's refunded total must confirm.
+              if (refundRetryExpired(pending)) {
+                if (typeof input.refund_id !== 'string' && input.not_refunded !== true) { json(409, { errorCode: 'REFUND_RETRY_EXPIRED', staged_at: pending.staged_at }); return; }
+                // Either answer is checked against this invoice as PayPal holds it now; a failed read settles nothing.
+                const read = await options.paypal.readInvoice(proof.remote_id);
+                if (read.kind !== 'invoice') throw new InputError(409, 'Invoice read-back unavailable.');
+                if (typeof input.refund_id === 'string') {
+                  // The refund must be one PayPal lists on this invoice, for the staged amount, and not recorded yet.
+                  const found = read.refunded?.ids.includes(input.refund_id) ? await options.paypal.readRefund(input.refund_id).catch(() => null) : null;
+                  if (!found || found.amount === null || cents(found.amount) !== cents(pending.amount) || (proof.refunds ?? []).some(r => r.refund_id === found.id)) { json(409, { errorCode: 'REFUND_ID_NOT_MATCHING' }); return; }
+                  proofs.holdPendingRefund(proof.token, found.id); pending = { ...pending, refund_id: found.id };
+                } else {
+                  const recorded = (proof.refunds ?? []).reduce((sum, r) => sum + cents(r.amount), 0);
+                  if (cents(read.refunded?.value ?? '0') !== recorded) { json(409, { errorCode: 'REFUND_FOUND_ON_PAYPAL' }); return; }
+                  proofs.clearPendingRefund(proof.token); json(200, { cleared: true }); return;
+                }
+              }
               try {
                 refund = pending.refund_id ? await options.paypal.readRefund(pending.refund_id)
-                  : await options.paypal.refundCapture(pending.capture_id, pending.amount, pending.request_id, `${line.ref} ${line.description.slice(0, 120)}: ${pending.reason}`);
+                  : await options.paypal.refundCapture(pending.capture_id, pending.amount, pending.request_id, `${line.ref} ${line.description.slice(0, 120)}${pending.quantity ? ` (${pending.quantity} of ${line.quantity})` : ''}: ${pending.reason}`);
               } catch (error) {
                 if ((error as Error).message === 'REFUND_REFUSED') { proofs.clearPendingRefund(proof.token); json(502, { errorCode: 'PAYPAL_REFUND_REFUSED', issue: (error as { issue?: string | null }).issue ?? null }); return; }
                 // `simulated` is set only by the opt-in INVOICEPROOF_FAULT demo, so the page can say the loss was staged.
@@ -453,6 +489,8 @@ export async function startLocalApp(options: Options) {
               // any other status (PENDING) stays staged, blocking revoke and other refunds until it settles.
               if (REFUND_FAILED.has(refund.status)) { proofs.clearPendingRefund(proof.token); json(502, { errorCode: 'PAYPAL_REFUND_REFUSED', issue: refund.status }); return; }
               if (refund.status !== 'COMPLETED') { proofs.holdPendingRefund(proof.token, refund.id); json(409, { errorCode: 'PAYPAL_REFUND_PENDING', status: refund.status }); return; }
+              // The note is kept as PayPal holds it; a reply without one (a repeated request) is read back once by id.
+              if (!refund.note) refund = { ...refund, note: (await options.paypal.readRefund(refund.id).catch(() => null))?.note };
               const recorded = proofs.recordRefund(proof.token, pending, refund);
               const read = await options.paypal.readInvoice(proof.remote_id);
               json(200, { ...publicProof(recorded), mode: 'sandbox', paypal: { ...compare(recorded, read), ...money(read), read_at: new Date().toISOString() } }); return;

@@ -18,10 +18,19 @@ export type Proof = { token: string; invoice_number: string; remote_id: string |
  * A paid line given back. The invoice items stay as they were paid; the refund goes back on the client's payment for
  * exactly the line's amount. `refund_id` and `status` are PayPal's reply; `request_id` is the PayPal-Request-Id used.
  */
-export type Refund = { at: string; ref: string; reason: string; amount: string; refund_id: string; status: string; request_id: string; capture_id: string };
+/** `quantity` is set when only part of the line's quantity was given back; `paypal_note` is the note PayPal holds on the refund. */
+export type Refund = { at: string; ref: string; reason: string; amount: string; refund_id: string; status: string; request_id: string; capture_id: string; quantity?: string; paypal_note?: string };
 /** Saved before PayPal is asked, so a lost reply is retried with the same request id and never refunds twice. */
 /** `refund_id` is set once PayPal has accepted the refund but not completed it (status PENDING). */
-export type PendingRefund = { ref: string; reason: string; amount: string; request_id: string; capture_id: string; staged_at: string; refund_id?: string };
+// PayPal remembers a PayPal-Request-Id for a limited time; its API requests guide gives a refund that can be retried
+// with the same id for up to 45 days. After that the same id could make a second refund, so a staged refund older
+// than this window is never resent: a person checks the payment in PayPal instead.
+export const REFUND_RETRY_DAYS = 30;
+/** True when a staged refund PayPal never confirmed is too old to resend under its saved request id. */
+export function refundRetryExpired(pending: { staged_at: string; refund_id?: string }, now = Date.now()): boolean {
+  return !pending.refund_id && now - Date.parse(pending.staged_at) > REFUND_RETRY_DAYS * 86_400_000;
+}
+export type PendingRefund = { ref: string; reason: string; amount: string; request_id: string; capture_id: string; staged_at: string; refund_id?: string; quantity?: string };
 export type PendingRevision = { action: Revision['action']; ref: string; reason: string; lines: ProofLine[]; billed_lines?: string[]; fingerprint: string; staged_at?: string };
 /**
  * One change the freelancer made after approval, usually in answer to a client's question. `before` is the line as
@@ -96,9 +105,9 @@ export class ProofStore {
   holdPendingRefund(token: string, refundId: string): void { const proof = this.get(token); if (proof?.pending_refund) this.commit(proof, { pending_refund: { ...proof.pending_refund, refund_id: refundId } }); }
   clearPendingRefund(token: string): void { const proof = this.get(token); if (proof?.pending_refund) this.commit(proof, { pending_refund: null }); }
   /** Records the refund PayPal confirmed for the staged request and clears the stage. */
-  recordRefund(token: string, pending: PendingRefund, paypal: { id: string; status: string }): Proof {
+  recordRefund(token: string, pending: PendingRefund, paypal: { id: string; status: string; note?: string }): Proof {
     const proof = this.live(token); if (!proof) throw new Error('Proof not found');
-    const refund: Refund = { at: new Date().toISOString(), ref: pending.ref, reason: pending.reason, amount: pending.amount, refund_id: paypal.id, status: paypal.status, request_id: pending.request_id, capture_id: pending.capture_id };
+    const refund: Refund = { at: new Date().toISOString(), ref: pending.ref, reason: pending.reason, amount: pending.amount, refund_id: paypal.id, status: paypal.status, request_id: pending.request_id, capture_id: pending.capture_id, ...(pending.quantity ? { quantity: pending.quantity } : {}), ...(paypal.note ? { paypal_note: paypal.note } : {}) };
     return this.commit(proof, { refunds: [...(proof.refunds ?? []), refund], pending_refund: null });
   }
   ask(token: string, ref: string, note: string): Question[] {

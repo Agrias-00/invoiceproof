@@ -4,7 +4,7 @@
 // card payment on PayPal's own pages. marks.json records what this run showed, so captions.mjs and narrate.mjs word
 // their lines truthfully.
 // Story: the AI drafts lines that must quote the work log and price list; the rush fee is blocked; the second AI
-// disputes billing two hours of waiting as design work and the freelancer keeps it with a reason the client will see;
+// disputes an hour on a review call billed at the design rate and the freelancer keeps it with a reason the client sees;
 // the invoice is sent through PayPal; the client opens the proof page and pays by card on PayPal; then questions that
 // line; the reply agent drafts from the same log; the freelancer refunds exactly that line on PayPal; the client's
 // page opens on paid, refunded and kept; and PayPal's own invoice page lists the payment and the refund.
@@ -30,8 +30,8 @@ const CASE = 'tempting';                         // the work log with a rush fee
 // Second of the finished cut at which each caption's moment begins. The script waits for these, so model and PayPal
 // latency only move later marks. Spaced so each narration line fits before the next mark. Mark 15 is the recovery
 // from a lost PayPal reply, staged by the server's opt-in INVOICEPROOF_FAULT=refund-lost-reply and said so on screen.
-const AT = { 1: 0, 2: 5, 3: 13, 4: 19, 5: 26, 6: 32, 7: 42, 8: 49, 9: 55, 10: 65, 11: 75, 12: 81, 13: 90, 14: 100, 15: 105, 16: 112, 17: 125, 18: 134 };
-const END = 140;                                 // with the cold open and end card the video stays under 180 s
+const AT = { 1: 0, 2: 5, 3: 13, 4: 19, 5: 26, 6: 32, 7: 42, 8: 49, 9: 55, 10: 65, 11: 75, 12: 81, 13: 90, 14: 100, 15: 110, 16: 121, 17: 134, 18: 143 };
+const END = 149;                                 // with the cold open and end card the video stays under 180 s
 const PAYPAL_ZOOM = 2.6;                         // PayPal's invoice page, so its status badge and payment activity read at video size
 const HOVER_HOLD_MS = 2400;                      // each line stays highlighted with its source this long
 const TICK_HOLD_MS = 550;
@@ -40,10 +40,11 @@ const PAYPAL_REFUND_TRIES = 72;                   // payer-page reloads (about 1
 const PAYPAL_HOLD_MS = 3500;                    // how long PayPal's refunded invoice page stays on screen (twice this)
 const PAY_HOLD_MS = 2500;                        // the invoice and the filled card form while the client pays: enough to read, then on
 const SHOWN_MS = 2500;                           // a model or PayPal call shows its working state this long; the rest of the wait is cut
-const KEEP_REASON = 'Revisions the client asked for.';
-const QUESTION = 'Your own log says these two hours were mostly waiting for our feedback.';
+const KEEP_REASON = 'The call walked the client through these revisions.';
+const QUESTION = 'We didn\'t agree to the design rate for the hour on the call.';
+const GIVE_BACK = '1';                           // hours of the questioned line the freelancer gives back: the call, not the design hour
 const RUSH_FEE = /rush fee/i;                    // the fee in the tempting work log that the price list does not have
-const WAITING = /waiting/i;                      // the disputed line bills time spent waiting for feedback
+const CALL = /\bcall\b/i;                        // the disputed line bills an hour on a review call at the design rate
 const BACKDROP = '0xE9EDF2';                     // fills the frame around a tab that paints less than the frame
 
 if (again) {
@@ -219,7 +220,7 @@ try {
   step = 'draft'; await mark(2);
   await press(page, '#draft-lines');
   await shortened(() => page.locator('#flow-results .card').first().waitFor());
-  // Captions and narration say "the rush fee was blocked" and "the second AI disputes the waiting time": the take
+  // Captions and narration say "the rush fee was blocked" and "the second AI disputes the review call": the take
   // stops unless this run showed exactly that, and the card texts are kept as the evidence.
   // An earlier take on the same database has already invoiced this log, which flags every line; that is not this story.
   if (await page.locator('#flow-results .card').filter({ hasText: /Already on invoice/ }).count()) throw new Error('this log is already invoiced in the server\'s database; restart the server on a fresh database for each take');
@@ -228,7 +229,7 @@ try {
   if (!run.blocked) throw new Error('the rush fee was not blocked in this run; re-take');
   run.blocked_line = (await rushCard.innerText()).replace(/\s+/g, ' ').trim();
   const disputedCards = page.locator('#flow-results .card.disputed');
-  if (await disputedCards.count() !== 1 || !WAITING.test(await disputedCards.first().innerText())) throw new Error('the review did not dispute exactly the waiting-time line; re-take');
+  if (await disputedCards.count() !== 1 || !CALL.test(await disputedCards.first().innerText())) throw new Error(`the review did not dispute exactly the review-call line (${await disputedCards.count()} disputed: ${(await disputedCards.allInnerTexts()).join(' / ').replace(/\s+/g, ' ').slice(0, 400)}); re-take`);
   run.disputed_line = (await disputedCards.first().innerText()).replace(/\s+/g, ' ').trim();
 
   step = 'blocked'; await mark(3);
@@ -319,9 +320,9 @@ try {
 
   step = 'question'; await mark(12);
   // Blocked lines keep their numbers, so the questioned line is found by its text, not by its position.
-  const waitingLine = proofTab.locator('.proof-line').filter({ hasText: WAITING });
-  if (await waitingLine.count() !== 1) throw new Error('the proof page does not show exactly one waiting-time line');
-  const ref = (await waitingLine.getAttribute('id')).replace(/^line-/, '');
+  const callLine = proofTab.locator('.proof-line').filter({ hasText: CALL });
+  if (await callLine.count() !== 1) throw new Error('the proof page does not show exactly one review-call line');
+  const ref = (await callLine.getAttribute('id')).replace(/^line-/, '');
   await into(proofTab, `#line-${ref}`); await look(proofTab, 'question', `#line-${ref}`); await proofTab.waitForTimeout(750);
   await proofTab.locator(`#ask-${ref}`).focus(); await proofTab.keyboard.type(QUESTION, { delay: 40 });
   await press(proofTab, `#ask-send-${ref}`);
@@ -341,7 +342,18 @@ try {
   // The server runs with INVOICEPROOF_FAULT=refund-lost-reply: PayPal makes the refund, then its reply is dropped
   // once. The app says so ("Simulated lost reply") and the retry resends the same PayPal-Request-Id.
   step = 'refund'; await mark(14);
-  await into(page, '#revise-refund-0'); await page.waitForTimeout(800);
+  // The app's suggestion for the questioned line, with this run's own sums, stays on screen before the click.
+  await into(page, '#resolution-0'); await look(page, 'suggestion', '#resolution-0');
+  run.resolution = { head: (await page.locator('#resolution-0 .resolution-head').innerText()).trim(), sums: (await page.locator('#resolution-0 .resolution-sums').innerText()).trim() };
+  if (!/^Suggested: refund /.test(run.resolution.head)) throw new Error(`the app did not suggest a refund: ${run.resolution.head}`);
+  await page.waitForTimeout(LOOK_HOLD_MS);
+  // The suggestion covers the whole line; the freelancer gives back only the hour in question, at the line's own rate.
+  await into(page, '#revise-back-0'); await page.locator('#revise-back-0').fill(''); await page.locator('#revise-back-0').focus(); await page.keyboard.type(GIVE_BACK, { delay: 120 });
+  await look(page, 'give back', '#revise-back-0', '#revise-refund-0');
+  run.resolution.chosen = (await page.locator('#resolution-chosen-0').innerText()).trim();
+  run.give_back = { quantity: GIVE_BACK, button: (await page.locator('#revise-refund-0').innerText()).trim() };
+  if (!run.give_back.button.startsWith(`Refund ${GIVE_BACK} of `)) throw new Error(`the refund button does not name the part: ${run.give_back.button}`);
+  await page.waitForTimeout(LOOK_HOLD_MS);
   page.on('dialog', dialog => dialog.accept());     // the browser's confirm box is not in the recording; the script accepts it
   await press(page, '#revise-refund-0');
   await shortened(() => page.locator('#questions .refund-note').waitFor());
@@ -363,6 +375,12 @@ try {
   await page.locator('#refund-done-0').waitFor();
   await into(page, '#questions li:first-child .revise');
   await look(page, 'refunded', '#questions li:first-child .revise');
+  await page.waitForTimeout(LOOK_HOLD_MS);
+  // PayPal's own record of the refund, read back from PayPal: it names the line and the reason, which a refund made
+  // in PayPal does not. The take stops unless PayPal returned that note.
+  run.refund.paypal_note = (await page.locator('#refund-record-0 q').innerText()).trim();
+  if (!run.refund.paypal_note.startsWith(run.refund.ref)) throw new Error(`PayPal's refund note does not name the line: ${run.refund.paypal_note}`);
+  await look(page, 'paypal record', '#refund-record-0');
   await page.waitForTimeout(LOOK_HOLD_MS);
   await press(page, '#answer-send-0');
   await page.getByText('Reply published').waitFor();

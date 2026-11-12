@@ -11,7 +11,7 @@ if (globalThis.document && globalThis.fetch && document.querySelector('.workspac
     const TEXT_CHANGED = 'The text changed. Draft the lines again.';
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const reasons = { MALFORMED_LINE: 'The line is malformed.', EMPTY_QUOTE: 'No quote supports it.', WORK_QUOTE_NOT_FOUND: 'The work quote is not in the work log.', PRICE_QUOTE_NOT_FOUND: 'The price quote is not in the price list.', QUANTITY_NOT_IN_WORK_QUOTE: 'The quantity is not in the work quote.', RATE_NOT_IN_PRICE_QUOTE: 'The rate is not in the price quote.', QUOTE_SPANS_LINES: 'A quote runs across more than one line.', WORK_QUOTE_REUSED: 'Another line already bills these words of the work log.', ORIGINAL_LINE_NOT_ACCEPTED: 'This line was not originally accepted.' };
-    const errors = { INVOICE_NOT_REVISABLE: 'PayPal shows a payment on this invoice, so it can no longer be corrected in place.', PAYPAL_UPDATE_REFUSED: 'PayPal refused the correction. The proof was not changed.', LAST_LINE: 'The only line cannot be removed. Revoke the proof and cancel the invoice in PayPal instead.', QUOTE_CHECK_FAILED: 'The new quantity or rate is not in the line’s quotes.', REVISION_IN_PROGRESS: 'Another correction to this invoice is still running.', INVOICE_CHANGED_ELSEWHERE: 'The invoice was changed in PayPal since approval. Nothing was overwritten; check the proof page.', PAYPAL_UPDATE_UNCONFIRMED: 'PayPal did not confirm the correction. It is settled from PayPal on the next read; check the proof page.', REVISION_UNCONFIRMED: 'An earlier correction is not confirmed by PayPal yet. Try again shortly.', MODEL_NOT_CONFIGURED: 'No model key is set. The two examples work without one; your own text needs OPENROUTER_API_KEY.', MODEL_REPLY_INVALID: 'The model reply could not be read. Try again.', MODEL_REQUEST_FAILED: 'The model request failed. Try again.', LINES_NOT_REVIEWED: 'Compare every line with its quotes and tick it before approving.', DRAFT_OUT_OF_DATE: 'These lines are from an older draft. Draft the lines again.', REVIEW_OVERRIDE_REQUIRED: 'The AI review disputes a line. Remove it, or write why you keep it.', ALREADY_INVOICED: 'A line bills work that is already on an invoice. Remove it, or write why you bill it again.', REFUND_NEEDS_PAYPAL: 'Refunds need the PayPal sandbox; the offline mock has no payment to refund.', ALREADY_REFUNDED: 'This line was already refunded.', INVOICE_NOT_PAID: 'PayPal shows no payment on this invoice yet. Correct it in place instead.', PAYMENT_NOT_REFUNDABLE: 'This invoice was not paid in one PayPal payment, so it cannot be refunded from here. Refund it in PayPal.', REFUND_EXCEEDS_PAID: 'The line is more than what is left of the payment.', PAYPAL_REFUND_REFUSED: 'PayPal refused the refund. Nothing was refunded and the proof was not changed.', PAYPAL_REFUND_PENDING: 'PayPal accepted the refund but has not completed it. Press refund again later to read its status; the client sees it only once completed.', PAYPAL_REFUND_UNCONFIRMED: 'PayPal did not confirm the refund. Press refund again: the same request is resent, and PayPal answers it with the refund it already made instead of a second one.', REFUND_UNCONFIRMED: 'An earlier refund is not confirmed by PayPal yet. Press its refund button again to confirm it.' };
+    const errors = { REFUND_STAGED_DIFFERS: 'A refund of a different amount is already waiting on PayPal for this line. The quantity is now set to that refund: check the amount and retry.',INVOICE_NOT_REVISABLE: 'PayPal shows a payment on this invoice, so it can no longer be corrected in place.', PAYPAL_UPDATE_REFUSED: 'PayPal refused the correction. The proof was not changed.', REFUND_RETRY_EXPIRED: 'This refund was started over 30 days ago and PayPal never confirmed it. PayPal may no longer remember its request id, so it is not sent again: check the payment in PayPal, then settle it below.', REFUND_ID_NOT_MATCHING: 'PayPal has no refund with that id for this amount.', REFUND_FOUND_ON_PAYPAL: 'PayPal shows a refund this proof has not recorded. Enter its refund id instead.', LAST_LINE: 'The only line cannot be removed. Revoke the proof and cancel the invoice in PayPal instead.', QUOTE_CHECK_FAILED: 'The new quantity or rate is not in the line’s quotes.', REVISION_IN_PROGRESS: 'Another correction to this invoice is still running.', INVOICE_CHANGED_ELSEWHERE: 'The invoice was changed in PayPal since approval. Nothing was overwritten; check the proof page.', PAYPAL_UPDATE_UNCONFIRMED: 'PayPal did not confirm the correction. It is settled from PayPal on the next read; check the proof page.', REVISION_UNCONFIRMED: 'An earlier correction is not confirmed by PayPal yet. Try again shortly.', MODEL_NOT_CONFIGURED: 'No model key is set. The two examples work without one; your own text needs OPENROUTER_API_KEY.', MODEL_REPLY_INVALID: 'The model reply could not be read. Try again.', MODEL_REQUEST_FAILED: 'The model request failed. Try again.', LINES_NOT_REVIEWED: 'Compare every line with its quotes and tick it before approving.', DRAFT_OUT_OF_DATE: 'These lines are from an older draft. Draft the lines again.', REVIEW_OVERRIDE_REQUIRED: 'The AI review disputes a line. Remove it, or write why you keep it.', ALREADY_INVOICED: 'A line bills work that is already on an invoice. Remove it, or write why you bill it again.', REFUND_NEEDS_PAYPAL: 'Refunds need the PayPal sandbox; the offline mock has no payment to refund.', ALREADY_REFUNDED: 'This line was already refunded.', INVOICE_NOT_PAID: 'PayPal shows no payment on this invoice yet. Correct it in place instead.', PAYMENT_NOT_REFUNDABLE: 'This invoice was not paid in one PayPal payment, so it cannot be refunded from here. Refund it in PayPal.', REFUND_EXCEEDS_PAID: 'The line is more than what is left of the payment.', PAYPAL_REFUND_REFUSED: 'PayPal refused the refund. Nothing was refunded and the proof was not changed.', PAYPAL_REFUND_PENDING: 'PayPal accepted the refund but has not completed it. Press refund again later to read its status; the client sees it only once completed.', PAYPAL_REFUND_UNCONFIRMED: 'PayPal did not confirm the refund. Press refund again: the same request is resent, and PayPal answers it with the refund it already made instead of a second one.', REFUND_UNCONFIRMED: 'An earlier refund is not confirmed by PayPal yet. Press its refund button again to confirm it.' };
     async function request(path, payload) {
       const response = await fetch(path, payload === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await response.json();
@@ -253,23 +253,32 @@ if (globalThis.document && globalThis.fetch && document.querySelector('.workspac
       // after a lost reply, that the retry got back the first refund rather than a second one.
       const refundedRows = r => {
         const row = document.createElement('p'); row.className = 'refund-done'; row.id = `refund-done-${index}`; row.setAttribute('role', 'status');
-        row.textContent = `Refunded on PayPal: USD ${r.amount} for ${line.ref} · refund …${r.refund_id.slice(-4)} · ${r.status}`;
+        row.textContent = `Refunded on PayPal: USD ${r.amount} for ${r.quantity ? `${r.quantity} of ${line.quantity} on ` : ''}${line.ref} · refund …${r.refund_id.slice(-4)} · ${r.status}`;
+        // PayPal's own record of the refund names the line and the reason; a refund made in PayPal carries neither.
+        const noted = r.paypal_note && Object.assign(document.createElement('p'), { className: 'refund-record', id: `refund-record-${index}` });
+        if (noted) { const label = document.createElement('span'); label.textContent = 'PayPal’s record of this refund says'; const said = document.createElement('q'); said.textContent = r.paypal_note; noted.append(label, said); }
         // Only the simulated fault is known to have reached PayPal first; after a real lost reply the retry may be the request that made the refund.
         const how = recovered.get(`${base}#${line.ref}`);
         const again = how !== undefined && Object.assign(document.createElement('p'), { className: 'fine', textContent: how ? 'The retry resent the same PayPal-Request-Id, so PayPal returned the refund it had already made. Refunded once.' : 'The retry resent the same PayPal-Request-Id, so PayPal made one refund for this request, not two.' });
-        return again ? [row, again] : [row];
+        return [row, noted, again].filter(Boolean);
       };
       const done = money.refunded.get(line.ref);
       if (done) { box.append(...refundedRows(done)); return box; }
       if (money.paid) {
-        const amount = (Math.round(Number(line.quantity) * Number(line.rate) * 100) / 100).toFixed(2);
+        // The whole line by default; a smaller quantity gives back part of it at the line's own rate.
+        const back = document.createElement('input'); back.value = line.quantity; back.inputMode = 'decimal'; back.id = `revise-back-${index}`;
+        const backLabel = document.createElement('label'); backLabel.className = 'num'; backLabel.append(`Quantity to give back, of ${line.quantity}`, back);
+        const partial = () => Number(back.value) > 0 && Number(back.value) < Number(line.quantity);
+        const sum = () => (Math.round(Number(partial() ? back.value : line.quantity) * Number(line.rate) * 100) / 100).toFixed(2);
+        let amount = sum();
         const refund = document.createElement('button'); refund.type = 'button'; refund.className = suggested ? 'primary small' : 'ghost small'; refund.id = `revise-refund-${index}`;
-        refund.textContent = `Refund ${line.ref} (USD ${amount}) on PayPal`;
+        const label = () => { amount = sum(); refund.textContent = `Refund ${partial() ? `${back.value.trim()} of ${line.quantity} on ` : ''}${line.ref} (USD ${amount}) on PayPal`; };
+        back.addEventListener('input', label); label();
         refund.addEventListener('click', async () => {
           if (!confirm(`Refund USD ${amount} for ${line.ref} (${line.description}) on the client's PayPal payment? This cannot be undone.`)) return;
           refund.disabled = true;
           try {
-            const done = await request(`${base}/refund`, { ref: line.ref, reason: reason.value });
+            const done = await request(`${base}/refund`, { ref: line.ref, reason: reason.value, ...(partial() ? { quantity: back.value.trim() } : {}) });
             const r = done.refunds[done.refunds.length - 1];
             const lostNote = box.querySelector('.refund-note');
             if (lostNote) recovered.set(`${base}#${r.ref}`, lostNote.textContent.startsWith('Simulated lost reply'));
@@ -280,7 +289,24 @@ if (globalThis.document && globalThis.fetch && document.querySelector('.workspac
           } catch (error) {
             refund.disabled = false; fail(error.message);
             // A lost reply leaves the refund staged with its request id; the retry button says that it resends the same request.
+            if (error.message === 'REFUND_RETRY_EXPIRED' && !box.querySelector('.refund-settle')) {
+              // Outside the retry window a person settles the staged refund from what PayPal shows.
+              const settle = Object.assign(document.createElement('div'), { className: 'refund-settle' });
+              const id = Object.assign(document.createElement('input'), { placeholder: 'Refund id shown in PayPal' }); id.setAttribute('aria-label', 'Refund id shown in PayPal');
+              const found = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost small', textContent: 'Record this PayPal refund' });
+              const none = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost small', textContent: 'PayPal shows no refund: release it' });
+              const send = body => async () => {
+                try { await request(`${base}/refund`, { ref: line.ref, reason: reason.value, ...body() }); message('Settled from PayPal.'); shownQuestions = ''; poll(); loadHistory(); }
+                catch (settleError) { fail(settleError.message); }
+              };
+              found.addEventListener('click', send(() => ({ refund_id: id.value.trim() })));
+              none.addEventListener('click', send(() => ({ not_refunded: true })));
+              settle.append(id, found, none); refund.after(settle);
+            }
+            // The staged refund keeps its amount: the quantity is locked to it, so the next confirmation names what the retry sends.
+            if (error.message === 'REFUND_STAGED_DIFFERS') { back.value = error.data.quantity ?? line.quantity; back.disabled = true; back.dispatchEvent(new Event('input', { bubbles: true })); refund.textContent = `Retry ${line.ref} refund of USD ${error.data.amount} (same PayPal-Request-Id)`; }
             if (error.message === 'PAYPAL_REFUND_UNCONFIRMED') {
+              back.disabled = true;
               const text = `${error.data?.simulated ? 'Simulated lost reply: PayPal processed the refund, but its answer was dropped on purpose for this demo. ' : ''}${errors.PAYPAL_REFUND_UNCONFIRMED}`;
               $('flow-error').textContent = text;
               const note = box.querySelector('.refund-note') ?? Object.assign(document.createElement('p'), { className: 'review-note warn refund-note', role: 'status' });
@@ -289,7 +315,7 @@ if (globalThis.document && globalThis.fetch && document.querySelector('.workspac
             }
           }
         });
-        box.append(reasonLabel, refund); return box;
+        box.append(reasonLabel, backLabel, refund); return box;
       }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = suggested ? 'primary small' : 'ghost small'; remove.id = `revise-remove-${index}`;
       remove.textContent = `Remove ${line.ref} from the PayPal invoice`;
@@ -349,9 +375,36 @@ if (globalThis.document && globalThis.fetch && document.querySelector('.workspac
             try { await request(`${base}/answer`, { index, text: area.value, quote: drafted.quote, drafted_by: drafted.model }); answering = false; shownQuestions = ''; message('Reply published. The client sees it on the proof page.'); poll(); }
             catch (error) { fail(error.message); }
           });
-          // When the work log does not support the line, the same correction is offered as the first choice.
-          if (!drafted.quote) li.querySelector(`#revise-remove-${index}, #revise-refund-${index}`)?.classList.replace('ghost', 'primary');
-          draft.replaceWith(label, area, source, ...warnings, ...advice, note, publish); area.focus();
+          // The app's suggestion for the line itself: give back this line alone, or keep it. The money is the app's
+          // arithmetic and the reasons are the review already on record; the freelancer still clicks.
+          const r = drafted.resolution, giveBack = r?.action === 'give_back';
+          const resolution = [];
+          if (r) {
+            const card = document.createElement('div'); card.className = `resolution ${giveBack ? 'give-back' : 'keep'}`; card.id = `resolution-${index}`; card.setAttribute('role', 'status');
+            const head = document.createElement('p'); head.className = 'resolution-head';
+            head.textContent = giveBack ? `Suggested: ${money.paid ? 'refund' : 'remove'} ${r.ref} only` : `Suggested: keep ${r.ref}`;
+            const sums = document.createElement('p'); sums.className = 'resolution-sums';
+            if (giveBack) sums.append(Object.assign(document.createElement('b'), { textContent: `USD ${r.amount}` }), money.paid ? ' back to the client · ' : ' off the invoice · ', Object.assign(document.createElement('b'), { textContent: `USD ${r.kept}` }), money.paid ? ` of USD ${r.total} stays paid` : ` of USD ${r.total} stays billed`);
+            else sums.textContent = `USD ${r.amount} stays on the invoice of USD ${r.total}.`;
+            const why = document.createElement('ul'); for (const text of r.reasons) why.append(Object.assign(document.createElement('li'), { textContent: text }));
+            // A smaller quantity is the freelancer's own choice: the card then shows those sums beside the suggestion.
+            const chosen = document.createElement('p'); chosen.className = 'resolution-chosen'; chosen.id = `resolution-chosen-${index}`; chosen.hidden = true;
+            const choose = () => {
+              const back = li.querySelector(`#revise-back-${index}`), quantity = Number(back?.value);
+              if (!back) return; // After the refund the card keeps what was chosen.
+              const part = giveBack && money.paid && line && quantity > 0 && quantity < Number(line.quantity);
+              chosen.hidden = !part; sums.classList.toggle('superseded', Boolean(part));
+              if (!part) return;
+              const cents = Math.round(quantity * Number(line.rate) * 100);
+              chosen.replaceChildren('Your choice: ', Object.assign(document.createElement('b'), { textContent: `${back.value.trim()} of ${line.quantity} · USD ${(cents / 100).toFixed(2)}` }), ' back to the client · ', Object.assign(document.createElement('b'), { textContent: `USD ${((Math.round(Number(r.total) * 100) - cents) / 100).toFixed(2)}` }), ` of USD ${r.total} stays paid`);
+            };
+            li.addEventListener('input', choose); choose();
+            card.append(head, sums, chosen, why, Object.assign(document.createElement('p'), { className: 'fine', textContent: 'A suggestion from the review on record and the app’s own sums. Nothing is sent to PayPal until you click.' }));
+            resolution.push(card);
+          }
+          // When the suggestion is to give the line back, that correction becomes the first choice.
+          if (giveBack || !drafted.quote) li.querySelector(`#revise-remove-${index}, #revise-refund-${index}`)?.classList.replace('ghost', 'primary');
+          draft.replaceWith(label, area, source, ...warnings, ...advice, note, publish, ...resolution); area.focus();
         } catch (error) { answering = false; draft.disabled = false; draft.textContent = 'Draft a reply from the work log'; fail(error.message); }
       });
       li.append(draft);

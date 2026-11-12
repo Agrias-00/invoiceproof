@@ -168,3 +168,8 @@ details.about summary{cursor:pointer;font-weight:700;font-size:1.02rem}.about{ma
 .about[open] summary{margin-bottom:10px}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.thread path{stroke-dashoffset:0}}
+
+.refund-record{flex:1 1 100%;margin:0;padding:10px 12px;border-radius:10px;background:var(--paper-2,#f1ede2);font-size:.92rem}.refund-record span{display:block;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7}.refund-record q{font-family:var(--serif,Georgia,serif);font-size:1.02rem}
+.resolution{margin:14px 0 4px;padding:12px 14px;border-radius:10px;border:1px solid var(--line,#d9d4c7);border-left:5px solid var(--warn)}
+.resolution.keep{border-left-color:var(--ok,#2f7d4f)}.resolution p{margin:0}.resolution-head{font-weight:700}
+.resolution-sums{margin-top:4px!important;font-size:1.05rem}.resolution-sums.superseded{opacity:.6;font-size:.95rem}.resolution-chosen{margin-top:4px!important;font-size:1.05rem}.resolution ul{margin:6px 0 4px;padding-left:20px;font-size:.92rem}

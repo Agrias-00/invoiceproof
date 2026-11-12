@@ -176,9 +176,9 @@ test('without a model key an example uses the recorded reply, other text is refu
     const post: Post = (path, data) => fetch(app.origin + path, { method: 'POST', headers: { origin: app.origin, 'content-type': 'application/json' }, body: JSON.stringify(data) });
     const demo = DEMO_CASES.find(item => item.id === 'tempting')!;
     const drafted = await (await post('/api/draft', { log: demo.log, prices: demo.prices })).json();
-    assert.equal(drafted.recorded_at, RECORDED_AT);
+    assert.equal(drafted.recorded_at, RECORDED_AT.tempting);
     assert.deepEqual(drafted.results.map((result: { status: string; reason?: string }) => result.reason ?? result.status), ['accepted', 'accepted', 'accepted', 'EMPTY_QUOTE', 'accepted']);
-    // The recorded AI review goes with the recorded reply: the waiting-time line is disputed.
+    // The recorded AI review goes with the recorded reply: the client-call line is disputed.
     assert.deepEqual(drafted.reviews.map((r: { verdict: string }) => r.verdict), ['supports', 'supports', 'supports', 'disputes']);
     const lines = drafted.results.filter((result: { status: string }) => result.status === 'accepted').map((result: { line: unknown }) => result.line);
     const unexplained = await post('/api/flow-approve', { draft: drafted.draft_id, lines, reviewed: lines.map(() => true) });

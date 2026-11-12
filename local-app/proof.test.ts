@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startLocalApp } from './server.ts';
-import { ProofStore, compare, fingerprint } from './proof-store.ts';
+import { ProofStore, compare, fingerprint, refundRetryExpired, REFUND_RETRY_DAYS } from './proof-store.ts';
 import { payerViewUrl } from './paypal-contract.ts';
 
 const LINE = { description: 'Design', quantity: '2', rate: '50', work_quote: '2 hours', price_quote: '50 per hour' };
@@ -129,6 +129,9 @@ test('approve, send once, read the proof, ask a question, revoke', async () => {
     // The answer agent drafts from the stored texts; a published quote must be found in them.
     const draftedAnswer = await (await post(`/api/proof/${token}/answer-draft`, { index: 0 })).json();
     assert.equal(draftedAnswer.quote, '2 hours'); assert.equal(draftedAnswer.grounded, true);
+    // Beside the reply the app suggests what to do with the line, with its own sums.
+    assert.equal(draftedAnswer.resolution.ref, 'L1'); assert.equal(draftedAnswer.resolution.total, proof.lines.reduce((sum: number, l: any) => sum + Number(l.quantity) * Number(l.rate), 0).toFixed(2));
+    assert.equal(draftedAnswer.resolution.action, proof.lines[0].review.verdict === 'supports' ? 'keep' : 'give_back');
     assert.equal((await post(`/api/proof/${token}/answer`, { index: 0, text: 'Pages 1 and 2.', quote: '3 hours', drafted_by: null })).status, 400);
     const answered = await (await post(`/api/proof/${token}/answer`, { index: 0, text: 'Pages 1 and 2.', quote: '2 hours', drafted_by: 'fake' })).json();
     assert.equal(answered.questions[0].answer.quote, '2 hours');
@@ -214,7 +217,8 @@ test('a sent invoice is revised in place: PayPal first, then the proof keeps v1 
     assert.deepEqual(updates[0], [{ name: 'Design', description: 'L1 · Work: "2 hours design, 1.5 billable" · Price: "50 per hour"', quantity: '2', rate: '50' }]);
     assert.match(note, new RegExp(`Fingerprint ${removed.fingerprint.slice(0, 16)}$`), 'the PayPal note names the new fingerprint');
     // The question about the removed line can still be answered.
-    assert.equal((await post(`/api/proof/${token}/answer-draft`, { index: 0 })).status, 200);
+    const afterRemoval = await post(`/api/proof/${token}/answer-draft`, { index: 0 });
+    assert.equal(afterRemoval.status, 200); assert.equal((await afterRemoval.json()).resolution, null, 'a removed line has nothing to give back');
     // A published reply may quote only the entries behind the questioned line (L2): L1's log entry is genuine but not its source.
     const offLine = await post(`/api/proof/${token}/answer`, { index: 0, text: 'See the log.', quote: '2 hours design', drafted_by: null });
     assert.equal(offLine.status, 400); assert.match((await offLine.json()).error ?? '', /another log or price entry/);
@@ -255,7 +259,7 @@ test('a paid line is refunded for exactly its amount, once, with the request id 
       if (mode === 'lose') throw new Error('REFUND_UNKNOWN');   // PayPal refunded, but the reply never arrived
       return { id: refunds.get(request)!.id, status: refundStatus, amount };
     },
-    readRefund: async (id: string) => { calls.push({ capture: 'read', amount: '', request: id }); return { id, status: refundStatus, amount: null }; },
+    readRefund: async (id: string) => { calls.push({ capture: 'read', amount: '', request: id }); return { id, status: refundStatus, amount: [...refunds.values()].find(r => r.id === id)?.amount ?? null }; },
   };
   const options = { draft: async () => ({ model: 'fake', lines: [design, rush], cost_usd: null }), audit: async (lines: unknown[]) => ({ reviews: lines.map((_, index) => ({ index, verdict: 'supports' as const, reason: 'ok' })), model: 'fake', cost_usd: null }), paypal: paypal as never };
   let app = await startLocalApp({ dbPath: db, ...options } as never);
@@ -293,6 +297,32 @@ test('a paid line is refunded for exactly its amount, once, with the request id 
     assert.equal(shown.refund_pending, 'L2');
     assert.equal((await (await post(`/api/proof/${token}/revoke`, {})).json()).errorCode, 'REFUND_UNCONFIRMED');
     assert.equal((await (await refund('L1')).json()).errorCode, 'REFUND_UNCONFIRMED', 'another line waits for the open refund');
+    const differs = await (await post(`/api/proof/${token}/refund`, { ref: 'L2', reason: 'x', quantity: '0.5' })).json();
+    assert.equal(differs.errorCode, 'REFUND_STAGED_DIFFERS', 'a retry with another quantity is refused, never sent at the staged amount');
+    assert.equal(differs.quantity, null); assert.match(differs.amount, /^\d+\.\d{2}$/);
+    assert.equal((await (await post(`/api/proof/${token}/refund`, { ref: 'L2', reason: 'x', quantity: '0.5', not_refunded: true })).json()).errorCode, 'REFUND_STAGED_DIFFERS', 'a settlement field inside the retry window does not skip the amount check');
+    // Past the retry window the request is never resent. A person settles it from PayPal: an unknown refund id and
+    // "no refund" are both checked against PayPal, and the refund id PayPal holds is read back, not requested again.
+    await app.close();
+    const store = `${db}.proofs.json`, fresh = readFileSync(store, 'utf8'), aged = JSON.parse(fresh);
+    aged[0].pending_refund.staged_at = '2020-01-01T00:00:00.000Z'; writeFileSync(store, JSON.stringify(aged));
+    app = await startLocalApp({ dbPath: db, ...options } as never);
+    const sent = calls.length, settle = (extra: object) => post(`/api/proof/${token}/refund`, { ref: 'L2', reason: 'x', ...extra });
+    assert.equal((await (await refund('L2')).json()).errorCode, 'REFUND_RETRY_EXPIRED');
+    assert.equal((await (await settle({ refund_id: 'RF9' })).json()).errorCode, 'REFUND_ID_NOT_MATCHING');
+    assert.equal((await (await settle({ not_refunded: true })).json()).errorCode, 'REFUND_FOUND_ON_PAYPAL', 'PayPal shows the refund, so the stage is not released');
+    // A refund of the same amount that PayPal does not list on this invoice is not taken, and a failed read releases nothing.
+    refunds.set('other-invoice', { id: 'RF7', amount: '75.00' }); const listed = paypal.readInvoice;
+    paypal.readInvoice = (async () => { const read: any = await listed(); return { ...read, refunded: { value: '75.00', ids: ['RF1'] } }; }) as never;
+    assert.equal((await (await settle({ refund_id: 'RF7' })).json()).errorCode, 'REFUND_ID_NOT_MATCHING');
+    paypal.readInvoice = (async () => ({ kind: 'unavailable', code: 'READ_FAILED' })) as never;
+    assert.equal((await settle({ not_refunded: true })).status, 409, 'an unreadable invoice is not taken as no refund');
+    assert.equal((await (await fetch(`${app.origin}/api/proof/${token}`)).json()).refund_pending, 'L2');
+    paypal.readInvoice = listed; refunds.delete('other-invoice');
+    assert.equal(calls.slice(sent).every(call => call.capture === 'read'), true, 'nothing was requested again');
+    refundStatus = 'PENDING'; assert.equal((await (await settle({ refund_id: 'RF1' })).json()).errorCode, 'PAYPAL_REFUND_PENDING', 'the named refund is followed by its id');
+    refundStatus = 'COMPLETED'; calls.length = sent;
+    await app.close(); writeFileSync(store, fresh); app = await startLocalApp({ dbPath: db, ...options } as never);
     // The retry finds the refund PENDING at PayPal: it stays staged and is not shown as money returned.
     mode = 'ok'; refundStatus = 'PENDING'; r = await refund('L2');
     assert.equal(r.status, 409, 'an error status, so the page shows the pending message'); assert.equal((await r.json()).errorCode, 'PAYPAL_REFUND_PENDING');
@@ -314,6 +344,13 @@ test('a paid line is refunded for exactly its amount, once, with the request id 
     assert.equal((await (await refund('L1')).json()).errorCode, 'REFUND_EXCEEDS_PAID');
     shown = await (await fetch(`${app.origin}/api/proof/${token}`)).json();
     assert.equal(shown.refunds.length, 1); assert.equal(shown.lines.length, 2, 'the paid invoice keeps its lines');
+    // Part of a line: one of its two hours at the line's own rate, named in PayPal's note; never more than the line.
+    paid = { ...paid, value: '175.00' };
+    const part = (quantity: unknown) => post(`/api/proof/${token}/refund`, { ref: 'L1', reason: 'One hour was waiting.', quantity });
+    for (const bad of ['0', '2.5', '1.234', 1]) assert.equal((await part(bad)).status, 400, `quantity ${bad}`);
+    const half = await (await part('1')).json();
+    assert.deepEqual(half.refunds.map((x: any) => [x.ref, x.amount, x.quantity ?? null]), [['L2', '75.00', null], ['L1', '50.00', '1']]);
+    assert.equal(calls.findLast(call => call.capture === 'CAPTURE123')!.amount, '50.00');
   } finally { await app.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -482,4 +519,13 @@ test('the client summary counts every PayPal refund, and one PayPal has not show
   assert.deepEqual(proofMoney({ paid: '296.00', refunded: '150.00', refund_ids: ['R-OUT'] }, app), { paid: 29600, refunded: 25000, kept: 4600, lag: true });
   // Nothing refunded.
   assert.deepEqual(proofMoney({ paid: '296.00' }, []), { paid: 29600, refunded: 0, kept: 29600, lag: false });
+});
+
+test('a staged refund is resent only inside the window PayPal remembers its request id', () => {
+  const day = 86_400_000, staged_at = '2026-11-01T00:00:00.000Z', at = Date.parse(staged_at);
+  assert.equal(refundRetryExpired({ staged_at }, at + (REFUND_RETRY_DAYS - 1) * day), false);
+  assert.equal(refundRetryExpired({ staged_at }, at + (REFUND_RETRY_DAYS + 1) * day), true, 'an older resend could refund twice');
+  // A refund PayPal already accepted is read back by its id, never requested again, so its age does not matter.
+  assert.equal(refundRetryExpired({ staged_at, refund_id: 'RF1' }, at + 400 * day), false);
+  assert.ok(REFUND_RETRY_DAYS < 45, 'inside the 45 days PayPal documents');
 });

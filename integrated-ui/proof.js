@@ -30,7 +30,7 @@ if (globalThis.document && globalThis.fetch) {
       const tags = [];
       if (line.review.verdict === 'disputes') tags.push({ kind: 'disputed', text: 'AI review disputes' });
       if (proof.questions.some(q => q.ref === line.ref)) tags.push({ kind: 'asked', text: 'You asked' });
-      for (const r of (proof.refunds || []).filter(r => r.ref === line.ref)) tags.push({ kind: 'refunded', text: `Refunded USD ${r.amount}` });
+      for (const r of (proof.refunds || []).filter(r => r.ref === line.ref)) tags.push({ kind: 'refunded', text: `Refunded ${r.quantity ? `${r.quantity} of ${line.quantity} · ` : ''}USD ${r.amount}` });
       if (proof.refund_pending === line.ref) tags.push({ kind: 'pending', text: 'Refund being confirmed' });
       return tags;
     }

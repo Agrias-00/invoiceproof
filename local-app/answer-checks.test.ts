@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { inventedNumbers, quoteOnLine, scoreReply } from './answer-checks.ts';
-import { draftAnswer, promiseIn } from './answer-question.ts';
+import { draftAnswer, promiseIn, suggestResolution } from './answer-question.ts';
 
 const sources = { log: 'Mon: 2 hours design work on the landing page\nTue: 3 stock photo licences for the gallery', prices: 'Design work: USD 50.00 per hour\nStock photo licence: USD 12.00 each' };
 const design = { ref: 'L1', description: 'Landing page design', quantity: '2', rate: '50.00', work_quote: '2 hours design work on the landing page', price_quote: 'Design work: USD 50.00 per hour', override: null };
@@ -88,4 +88,21 @@ test('the draft warns about prose its sources do not support', async () => {
   const reply = await draftAnswer({ question: 'Why?', line, sources }, { apiKey: 'zz', fetch: fetch as typeof globalThis.fetch });
   assert.equal(reply.grounded, true);
   assert.match(reply.warnings.join(' '), /says wednesday, but this line's log entry names another day/);
+});
+
+test('the suggestion gives back only the questioned line when the review or its own entry is against it', () => {
+  const line = (ref: string, quantity: string, rate: string, verdict: string, override: string | null = null) => ({ ref, quantity, rate, review: { verdict }, override });
+  const lines = [line('L1', '3', '32.00', 'supports'), line('L2', '2', '50.00', 'disputes', 'the client asked for it'), line('L3', '1', '100.00', 'supports')];
+  const back = suggestResolution(lines[1]!, lines, { quote: 'mostly waiting' });
+  assert.deepEqual([back.action, back.amount, back.total, back.kept], ['give_back', '100.00', '296.00', '196.00']);
+  assert.match(back.reasons[0]!, /disputed this line before it was sent; it was kept on your reason/);
+  // A line the review agreed with is kept while its entry answers the question, and given back when it does not.
+  assert.equal(suggestResolution(lines[0]!, lines, { quote: '3 hours' }).action, 'keep');
+  // A refund already made on the payment no longer counts as paid.
+  const later = suggestResolution(lines[2]!, lines, { quote: null }, ['100.00']);
+  assert.deepEqual([later.amount, later.total, later.kept], ['100.00', '196.00', '96.00']);
+  const silent = suggestResolution(lines[0]!, lines, { quote: null });
+  assert.deepEqual([silent.action, silent.amount, silent.kept, silent.reasons.length], ['give_back', '96.00', '200.00', 1]);
+  // Cents are summed as integers: 0.1 + 0.2 style drift never reaches the screen.
+  assert.equal(suggestResolution(line('L1', '0.1', '0.30', 'supports'), [line('L1', '0.1', '0.30', 'supports'), line('L2', '0.2', '0.30', 'supports')], { quote: 'x' }).total, '0.09');
 });
