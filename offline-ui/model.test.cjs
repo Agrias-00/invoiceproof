@@ -1,0 +1,15 @@
+const test = require('node:test'); const assert = require('node:assert/strict');
+const { Model, minor } = require('./model.js');
+test('synthetic total is exact',()=>assert.equal(new Model().total(),'100.00'));
+test('decimal sum is exact',()=>assert.equal(minor('0.1')+minor('0.2'),30n));
+for(const x of ['1e2','-1',' 1','1.001','NaN',1,'01'])test(`reject ${JSON.stringify(x)}`,()=>assert.throws(()=>minor(x)));
+test('source mismatch blocks approval',()=>{const m=new Model();m.edit('rate','70.00');assert.throws(()=>m.approve());});
+test('approval required',()=>assert.throws(()=>new Model().begin('op')));
+test('edit invalidates approval',()=>{const m=new Model();m.approve();m.edit('description','Changed');assert.equal(m.snapshot().approvedRevision,null);assert.throws(()=>m.begin('op'));m.approve();assert.equal(m.begin('op'),true);});
+test('duplicate operation starts once',()=>{const m=new Model();m.approve();assert.equal(m.begin('op'),true);assert.equal(m.begin('op'),false);assert.throws(()=>m.begin('new'));});
+test('unknown cannot retry or edit',()=>{const m=new Model();m.approve();m.begin('op');m.finish('UNKNOWN');assert.equal(m.snapshot().state,'UNKNOWN');assert.throws(()=>m.begin('new'));assert.throws(()=>m.approve());assert.throws(()=>m.edit('description','new'));});
+test('only synthetic DRAFT succeeds',()=>{for(const s of ['SENT','PAID','FAILED','']){const m=new Model();m.approve();m.begin('op');m.finish(s);assert.equal(m.snapshot().state,'UNKNOWN');}});
+test('success is terminal',()=>{const m=new Model();m.approve();m.begin('op');m.finish('DRAFT');assert.equal(m.snapshot().state,'DRAFT_VERIFIED');assert.throws(()=>m.approve());});
+test('snapshot cannot mutate model',()=>{const m=new Model();m.snapshot().draft.rate='999';assert.equal(m.total(),'100.00');});
+test('instruction-looking description remains data',()=>{const m=new Model();m.edit('description','<script>fetch("https://invalid")</script>');m.approve();assert.equal(m.total(),'100.00');});
+test('invalid field rejected',()=>assert.throws(()=>new Model().edit('__proto__','bad')));

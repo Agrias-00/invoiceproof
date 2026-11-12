@@ -1,0 +1,9 @@
+node_modules/
+verification/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+.env
+*.env
+integrated-ui/fonts/

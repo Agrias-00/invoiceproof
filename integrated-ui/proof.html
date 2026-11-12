@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Invoice proof · InvoiceProof</title><link rel="stylesheet" href="/product.css"></head>
+<body>
+<header class="topbar"><div class="brand"><span class="mark" aria-hidden="true">IP</span><span><strong>Invoice proof</strong><small>The quotes behind each line of your invoice</small></span></div>
+<span id="mode-chip" class="chip">Sandbox · synthetic data</span></header>
+<main class="proof-main">
+<h1 id="proof-title" tabindex="-1">Loading the proof…</h1>
+<section id="proof-summary" class="summary" aria-labelledby="summary-title" hidden><h2 id="summary-title" class="visually-hidden">Money and lines in question</h2>
+<dl id="summary-figures" class="figures"></dl>
+<div id="attention-pane" hidden><h3 class="attention-title">Lines in question</h3><ul id="attention" class="attention"></ul></div></section>
+<p id="paypal-check" class="banner unknown" role="status" aria-live="polite">Checking the invoice in PayPal…</p>
+<p id="proof-intro" class="fine"></p>
+<h2 class="lines-title">Every line and its quotes</h2>
+<div id="proof-lines"></div>
+<section id="revisions-pane" class="pane" aria-labelledby="rev-title" hidden><h2 id="rev-title">Changes after your questions</h2>
+<p class="fine">The freelancer corrected this invoice after it was sent. PayPal holds the corrected invoice under the same number; the check above compares PayPal with the current version.</p>
+<ol id="revisions" class="revisions"></ol></section>
+<p><a id="payer-link" class="button primary" rel="noopener noreferrer" hidden>Open the invoice in PayPal</a></p>
+<p class="limit-note">Quotes show where a line came from, not that the work was done.</p>
+<details class="pane about"><summary id="fp-title">How this proof is checked</summary>
+<p id="fingerprint" class="readback"></p>
+<p class="fine">The fingerprint is a SHA-256 of the work log, the price list and the approved lines. It changes if any of them changes. It does not prove who sent the invoice. The check above reads the invoice from PayPal each time this page loads and compares its items, quantities, rates, currency and total with the approved lines.</p></details>
+<p id="proof-error" role="alert" class="flow-error"></p>
+</main>
+<script src="/proof.js"></script></body></html>

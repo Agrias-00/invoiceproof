@@ -1,0 +1,1 @@
+{"name":"invoiceproof-offline-durable-ledger","version":"0.3.0","private":true,"type":"module","scripts":{"test":"node --test --test-reporter=tap ledger.test.ts recovery.test.ts","demo":"node demo.ts"},"engines":{"node":">=24"}}

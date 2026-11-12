@@ -1,0 +1,180 @@
+{
+  "model": "openai/gpt-5.6-terra",
+  "run_at": "2026-11-10T08:21:41.231Z",
+  "total": 12,
+  "agree": 11,
+  "misses": 0,
+  "false_alarms": 1,
+  "not_reviewed": 0,
+  "cost_usd": 0.007278,
+  "per_case": [
+    {
+      "description": "Landing page design",
+      "quantity": "2",
+      "rate": "50",
+      "work_quote": "2 hours landing page design",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "supports",
+      "kind": "correct",
+      "review": {
+        "index": 0,
+        "verdict": "supports",
+        "reason": "The work quote shows 2 hours of landing page design and the price quote gives a USD 50 hourly design rate."
+      }
+    },
+    {
+      "description": "Copy editing",
+      "quantity": "3",
+      "rate": "40",
+      "work_quote": "3 hours copy editing",
+      "price_quote": "Copy editing: USD 40 per hour",
+      "expected": "supports",
+      "kind": "correct",
+      "review": {
+        "index": 1,
+        "verdict": "supports",
+        "reason": "The work quote shows 3 hours of copy editing and the price quote gives a USD 40 hourly copy-editing rate."
+      }
+    },
+    {
+      "description": "Photo licences",
+      "quantity": "2",
+      "rate": "12",
+      "work_quote": "2 photo licences purchased",
+      "price_quote": "Photo licence: USD 12 each",
+      "expected": "supports",
+      "kind": "correct",
+      "review": {
+        "index": 2,
+        "verdict": "supports",
+        "reason": "The work quote shows 2 photo licences purchased and the price quote gives a USD 12 rate for each photo licence."
+      }
+    },
+    {
+      "description": "Landing page design",
+      "quantity": "2",
+      "rate": "40",
+      "work_quote": "2 hours landing page design",
+      "price_quote": "Copy editing: USD 40 per hour",
+      "expected": "disputes",
+      "kind": "wrong_rate",
+      "review": {
+        "index": 3,
+        "verdict": "disputes",
+        "reason": "Although the work quantity matches, the price quote is for copy editing rather than landing page design."
+      }
+    },
+    {
+      "description": "Copy editing",
+      "quantity": "1",
+      "rate": "50",
+      "work_quote": "1 hour copy editing",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "disputes",
+      "kind": "wrong_rate",
+      "review": {
+        "index": 4,
+        "verdict": "disputes",
+        "reason": "The work quote supports copy editing, but the quoted rate is for design rather than copy editing."
+      }
+    },
+    {
+      "description": "Logo design",
+      "quantity": "3",
+      "rate": "50",
+      "work_quote": "1 hour logo design",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "disputes",
+      "kind": "wrong_quantity",
+      "review": {
+        "index": 5,
+        "verdict": "disputes",
+        "reason": "The work quote records only 1 hour of logo design, not the billed quantity of 3 hours."
+      }
+    },
+    {
+      "description": "Photo licences",
+      "quantity": "4",
+      "rate": "12",
+      "work_quote": "2 photo licences purchased",
+      "price_quote": "Photo licence: USD 12 each",
+      "expected": "disputes",
+      "kind": "wrong_quantity",
+      "review": {
+        "index": 6,
+        "verdict": "disputes",
+        "reason": "The work quote records purchase of only 2 photo licences, not 4."
+      }
+    },
+    {
+      "description": "Logo design",
+      "quantity": "2",
+      "rate": "50",
+      "work_quote": "2 hours copy editing",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "disputes",
+      "kind": "unrelated_quote",
+      "review": {
+        "index": 7,
+        "verdict": "disputes",
+        "reason": "The work quote describes copy editing rather than logo design."
+      }
+    },
+    {
+      "description": "Copy editing",
+      "quantity": "1",
+      "rate": "40",
+      "work_quote": "1 hour writing code",
+      "price_quote": "Copy editing: USD 40 per hour",
+      "expected": "disputes",
+      "kind": "unrelated_quote",
+      "review": {
+        "index": 8,
+        "verdict": "disputes",
+        "reason": "The work quote describes writing code rather than copy editing."
+      }
+    },
+    {
+      "description": "Homepage design",
+      "quantity": "2",
+      "rate": "50",
+      "work_quote": "2 hours on homepage, mostly waiting for feedback",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "disputes",
+      "kind": "ambiguous",
+      "review": {
+        "index": 9,
+        "verdict": "disputes",
+        "reason": "The work-line context says the time was mostly spent waiting for feedback, rather than performing billable homepage design work."
+      }
+    },
+    {
+      "description": "Design consultation",
+      "quantity": "1",
+      "rate": "50",
+      "work_quote": "1 hour design consultation with client",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "supports",
+      "kind": "ambiguous",
+      "review": {
+        "index": 10,
+        "verdict": "disputes",
+        "reason": "The work quote is for design consultation, while the price quote gives a rate for design work rather than consultation."
+      }
+    },
+    {
+      "description": "Development",
+      "quantity": "2",
+      "rate": "50",
+      "work_quote": "2 hours development",
+      "price_quote": "Design: USD 50 per hour",
+      "expected": "disputes",
+      "kind": "wrong_rate",
+      "review": {
+        "index": 11,
+        "verdict": "disputes",
+        "reason": "The work quote supports development, but the price quote gives a rate for design rather than development."
+      }
+    }
+  ]
+}

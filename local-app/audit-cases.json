@@ -1,0 +1,14 @@
+[
+  {"description":"Landing page design","quantity":"2","rate":"50","work_quote":"2 hours landing page design","price_quote":"Design: USD 50 per hour","expected":"supports","kind":"correct"},
+  {"description":"Copy editing","quantity":"3","rate":"40","work_quote":"3 hours copy editing","price_quote":"Copy editing: USD 40 per hour","expected":"supports","kind":"correct"},
+  {"description":"Photo licences","quantity":"2","rate":"12","work_quote":"2 photo licences purchased","price_quote":"Photo licence: USD 12 each","expected":"supports","kind":"correct"},
+  {"description":"Landing page design","quantity":"2","rate":"40","work_quote":"2 hours landing page design","price_quote":"Copy editing: USD 40 per hour","expected":"disputes","kind":"wrong_rate"},
+  {"description":"Copy editing","quantity":"1","rate":"50","work_quote":"1 hour copy editing","price_quote":"Design: USD 50 per hour","expected":"disputes","kind":"wrong_rate"},
+  {"description":"Logo design","quantity":"3","rate":"50","work_quote":"1 hour logo design","price_quote":"Design: USD 50 per hour","expected":"disputes","kind":"wrong_quantity"},
+  {"description":"Photo licences","quantity":"4","rate":"12","work_quote":"2 photo licences purchased","price_quote":"Photo licence: USD 12 each","expected":"disputes","kind":"wrong_quantity"},
+  {"description":"Logo design","quantity":"2","rate":"50","work_quote":"2 hours copy editing","price_quote":"Design: USD 50 per hour","expected":"disputes","kind":"unrelated_quote"},
+  {"description":"Copy editing","quantity":"1","rate":"40","work_quote":"1 hour writing code","price_quote":"Copy editing: USD 40 per hour","expected":"disputes","kind":"unrelated_quote"},
+  {"description":"Homepage design","quantity":"2","rate":"50","work_quote":"2 hours on homepage, mostly waiting for feedback","price_quote":"Design: USD 50 per hour","expected":"disputes","kind":"ambiguous"},
+  {"description":"Design consultation","quantity":"1","rate":"50","work_quote":"1 hour design consultation with client","price_quote":"Design: USD 50 per hour","expected":"supports","kind":"ambiguous"},
+  {"description":"Development","quantity":"2","rate":"50","work_quote":"2 hours development","price_quote":"Design: USD 50 per hour","expected":"disputes","kind":"wrong_rate"}
+]

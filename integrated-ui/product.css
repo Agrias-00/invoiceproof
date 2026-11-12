@@ -1,0 +1,170 @@
+/* InvoiceProof, "proof ledger" direction: a paper work surface where each invoice line is tied by a highlighter
+   thread to the words it quotes. Source texts are set in a book serif (they are documents); the interface is Inter.
+   PayPal midnight #002991 stays the brand accent and black pill buttons follow PayPal's own controls. No PayPal logo
+   or wordmark is drawn. Inter (OFL) is served from /inter.ttf when fetched; otherwise the system sans is used. */
+@font-face{font-family:"Inter";src:url("/inter.ttf") format("truetype");font-weight:100 900;font-display:swap}
+:root{--paper:#f5f2ea;--sheet:#fffdf8;--ink:#14171f;--ink-2:#5b5f6b;--rule:#e2dccd;--rule-2:#cfc7b3;
+--brand:#002991;--brand-ink:#fff;--link:#0050d8;--action:#14171f;--action-hover:#2c3140;--action-press:#454b5c;--action-ink:#fff;
+--soft:rgba(20,23,31,.06);--soft-hover:rgba(20,23,31,.11);--soft-press:rgba(20,23,31,.16);
+--ok:#0a6b3a;--ok-bg:#e3f1e7;--bad:#b3122b;--bad-bg:#fbe9eb;--warn:#8a4b00;--warn-bg:#fdf0d9;
+--hl:#fff1a8;--hl-on:#ffd84d;--thread:#e0a800;--accent:var(--brand);--accent-ink:#fff;--radius:14px;
+--sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--serif:Charter,"Bitstream Charter",C059,"Iowan Old Style",Georgia,serif;
+--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+--shadow:0 1px 0 rgba(20,23,31,.04),0 8px 24px -14px rgba(20,23,31,.28);--ease:cubic-bezier(.2,.8,.2,1);
+font:16px/1.55 var(--sans);font-feature-settings:"cv11","ss01";color:var(--ink);background:var(--paper);color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--paper:#0d1017;--sheet:#151924;--ink:#eef0f5;--ink-2:#a3a9b8;--rule:#262c3b;--rule-2:#353d50;
+--brand:#7fb2ff;--brand-ink:#0d1017;--link:#8cbcff;--action:#eef0f5;--action-hover:#d3d7e0;--action-press:#b9bfcc;--action-ink:#0d1017;
+--soft:rgba(238,240,245,.07);--soft-hover:rgba(238,240,245,.12);--soft-press:rgba(238,240,245,.17);
+--ok:#6fd79c;--ok-bg:#0f2a1c;--bad:#ff8d9b;--bad-bg:#35111a;--warn:#ffc46b;--warn-bg:#33240a;
+--hl:#4a3f0e;--hl-on:#8a6d00;--thread:#ffcc33;--accent:#7fb2ff;--accent-ink:#0d1017;--shadow:0 10px 30px -18px #000;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip-link{position:absolute;left:12px;top:-100px;background:var(--sheet);color:var(--link);padding:12px;z-index:10}.skip-link:focus{top:12px}
+:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+h1,h2,.brand strong{font-weight:750;letter-spacing:-.022em;text-wrap:balance}a{color:var(--link);text-underline-offset:3px}
+.tnum,.amount,.figure dd,#flow-total{font-variant-numeric:tabular-nums}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:12px 28px;background:color-mix(in srgb,var(--sheet) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:12px}.brand strong{display:block;font-size:1.1rem}.brand small{display:block;color:var(--ink-2);font-size:.84rem}
+.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:var(--brand);color:var(--brand-ink);font-weight:800;font-size:.85rem;letter-spacing:.02em;box-shadow:inset 0 -3px 0 var(--thread)}
+.steps{display:flex;gap:4px;list-style:none;margin:0 auto;padding:4px;counter-reset:s;background:var(--soft);border-radius:999px}
+.steps li{counter-increment:s;padding:6px 16px;border-radius:999px;color:var(--ink-2);font-weight:600;font-size:.88rem;transition:background .25s var(--ease),color .25s}
+.steps li::before{content:counter(s) "\2002"}.steps li.on{background:var(--sheet);color:var(--ink);box-shadow:var(--shadow)}.steps li.done{color:var(--ok)}.steps li.done::before{content:"\2713\2002"}
+/* Small outlined marks, like a proofreader's margin codes, not filled badges */
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;padding:2px 7px;border:1px solid currentColor;border-radius:4px;background:transparent;color:var(--ink-2);white-space:nowrap}
+.chip.ok{color:var(--ok)}.chip.bad{color:var(--bad);white-space:normal}.chip.warn{color:var(--warn)}
+
+/* Layout */
+main{max-width:1560px;margin:0 auto;padding:28px 28px 48px}
+.workspace{display:grid;grid-template-columns:minmax(320px,5fr) minmax(420px,7fr);gap:28px;align-items:start}
+@media (max-width:900px){.workspace{grid-template-columns:1fr}main{padding:16px}.topbar{padding:10px 16px;gap:12px}.steps{margin:0}}
+.pane{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--radius);padding:24px 26px;box-shadow:var(--shadow)}
+.sources{position:sticky;top:84px}@media (max-width:900px){.sources{position:static}}
+.pane-head h2{margin:0 0 4px;font-size:1.25rem}.pane-head p{margin:0 0 16px;color:var(--ink-2);max-width:62ch}
+h3{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2);margin:18px 0 8px;font-weight:700}
+label{display:block;font-weight:600;margin:14px 0 6px}
+textarea,input{font:inherit;color:var(--ink);background:var(--sheet);border:1px solid var(--rule-2);border-radius:10px;padding:10px 12px;width:100%;transition:border-color .15s,box-shadow .15s}
+textarea:focus,input:focus{border-color:var(--link);box-shadow:0 0 0 3px color-mix(in srgb,var(--link) 18%,transparent);outline:none}
+textarea{resize:vertical;font-family:var(--serif);font-size:1rem;line-height:1.65}
+
+/* Buttons: PayPal-style pills */
+button,.button{font:inherit;font-weight:700;letter-spacing:-.01em;min-height:46px;padding:11px 22px;border-radius:999px;border:0;background:var(--soft);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,transform .15s var(--ease);touch-action:manipulation}
+button:hover,.button:hover{background:var(--soft-hover)}button:active,.button:active{background:var(--soft-press);transform:scale(.98)}
+button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.primary{background:var(--action);color:var(--action-ink)}.primary:hover{background:var(--action-hover)}.primary:active{background:var(--action-press)}
+.ghost{background:var(--soft)}.wide{width:100%;margin-top:18px}.danger{color:var(--bad)}
+.small{min-height:36px;padding:6px 16px;font-size:.88rem}
+.examples{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.examples span{color:var(--ink-2);font-size:.85rem;margin-right:4px}
+
+/* Source texts: documents set in serif, quotes marked with a highlighter */
+.source-text{white-space:pre-wrap;overflow-wrap:anywhere;font:1rem/1.75 var(--serif);background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;margin:0}
+.source-text mark{background:linear-gradient(transparent 12%,var(--hl) 12% 88%,transparent 88%);color:inherit;padding:0 1px;border-radius:2px;transition:background-color .25s,box-shadow .25s}
+.source-text mark.on{background:var(--hl-on);box-shadow:0 0 0 2px var(--hl-on),0 0 0 5px color-mix(in srgb,var(--thread) 30%,transparent)}
+.source-text mark sup{font:700 .75rem var(--sans);margin-left:3px;color:var(--ink);vertical-align:super}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+
+/* The proof thread: an overlay line from a focused line card to its marked quotes (drawn by flow.js) */
+.thread{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:4;overflow:visible}
+.thread path{fill:none;stroke:var(--thread);stroke-width:2.25;stroke-linecap:round;stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:draw .55s var(--ease) forwards}
+.thread circle{fill:var(--thread)}.thread.static path{animation:none;stroke-dashoffset:0}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+.status-line{margin:8px 0;color:var(--ink-2);min-height:1.5em}.flow-error{color:var(--bad);font-weight:600}.flow-error:empty{display:none}
+
+/* Line cards */
+/* Lines are ledger rows between hairlines, not boxed cards */
+.cards{display:grid;gap:0;margin:12px 0;border-bottom:1px solid var(--rule)}
+.card{position:relative;border:0;border-top:1px solid var(--rule);border-radius:0;padding:18px 12px 16px;background:transparent;transition:box-shadow .2s,border-color .2s,transform .2s var(--ease);animation:rise .45s var(--ease) both}
+.card.blocked{background:linear-gradient(var(--bad-bg),var(--bad-bg)) padding-box}
+.card.focus{box-shadow:0 0 0 2px var(--thread),0 0 0 6px color-mix(in srgb,var(--thread) 22%,transparent)}
+.cards .card:nth-child(2){animation-delay:.06s}.cards .card:nth-child(3){animation-delay:.12s}.cards .card:nth-child(4){animation-delay:.18s}.cards .card:nth-child(5){animation-delay:.24s}.cards .card:nth-child(n+6){animation-delay:.3s}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.card-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding-right:96px}
+.ref{font:800 .78rem var(--mono);color:var(--brand);background:color-mix(in srgb,var(--brand) 10%,transparent);padding:3px 8px;border-radius:6px}
+.card-fields{display:grid;grid-template-columns:1fr 90px 110px 120px;gap:10px;align-items:end}
+.card-fields label{margin:0 0 4px;font-size:.76rem;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
+.amount{font-weight:750;font-size:1.15rem;padding:10px 0;text-align:right;letter-spacing:-.01em}
+@media (max-width:600px){.card-fields{grid-template-columns:1fr 1fr}.card-fields>div:first-child{grid-column:1/-1}.card-head{padding-right:0}}
+.blocked-line{margin:0;font-weight:600;text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--bad) 60%,transparent);color:var(--ink-2)}
+
+/* Stamps: drawn in CSS from state the DOM already carries */
+.card::after{position:absolute;top:12px;right:14px;font:800 .7rem/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:6px 9px;border:2px solid;border-radius:6px;transform:rotate(-6deg);opacity:0;pointer-events:none}
+.card:has(.reviewed input:checked)::after{content:"Compared";color:var(--ok);opacity:.9;animation:stamp .35s var(--ease)}
+.card.blocked::after{content:"Blocked";color:var(--bad);opacity:.9;animation:stamp .35s var(--ease) .2s}
+@keyframes stamp{from{transform:rotate(-6deg) scale(1.8)}60%{transform:rotate(-6deg) scale(.94)}to{transform:rotate(-6deg) scale(1)}}
+@media (max-width:600px){.card::after{display:none}}
+
+.quotes{margin:14px 0 0;display:grid;gap:6px;padding-top:12px;border-top:1px dashed var(--rule-2)}
+.quote{margin:0;font-size:.95rem;overflow-wrap:anywhere;display:flex;gap:10px;align-items:baseline}
+.quote b{flex:0 0 auto;min-width:54px;color:var(--ink-2);font-size:.7rem;text-transform:uppercase;letter-spacing:.09em}
+.quote q{font-family:var(--serif);quotes:"\201C" "\201D";background:linear-gradient(transparent 14%,var(--hl) 14% 86%,transparent 86%);padding:0 3px}
+.quote.missing q{background:var(--bad-bg);color:var(--bad);text-decoration:underline wavy color-mix(in srgb,var(--bad) 55%,transparent);text-underline-offset:4px}
+.refund-done{flex:1 1 100%;margin:0;padding:10px 12px;border:2px solid var(--ok);border-radius:10px;color:var(--ok);font-weight:700;animation:stamp .4s var(--ease)}
+.review-note{margin:10px 0 0;padding:2px 0;font-size:.92rem}.review-note.ok{color:var(--ink-2)}.review-note.warn{color:var(--warn);font-weight:600}
+.card-foot{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
+.reviewed{display:flex;gap:10px;align-items:center;font-weight:600;margin:0;cursor:pointer}.reviewed input{width:22px;height:22px;min-height:0;accent-color:var(--ok);cursor:pointer}
+.override{margin-top:10px}.override label{margin:0 0 4px;font-size:.85rem;color:var(--warn)}
+.edited-note{margin:8px 0 0;color:var(--warn)}
+.approve-bar{position:sticky;bottom:0;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--sheet);border-top:1px solid var(--rule);padding:14px 0 10px;margin-top:8px;box-shadow:0 -12px 16px -14px rgba(20,23,31,.3);z-index:2}
+#flow-total{margin:0;font-weight:650}
+
+/* PayPal step */
+.paypal{margin-top:28px;animation:rise .5s var(--ease) both}
+.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:0;list-style:none;padding:0;margin:0 0 20px;counter-reset:t}
+.timeline li{position:relative;padding:14px 16px 14px 46px;color:var(--ink-2);border-top:3px solid var(--rule);transition:border-color .4s var(--ease)}
+.timeline li::before{content:"";position:absolute;left:14px;top:16px;width:20px;height:20px;border-radius:50%;border:2px solid var(--rule-2);background:var(--sheet);transition:all .3s var(--ease)}
+.timeline li strong{display:block;color:var(--ink)}
+.timeline li.done{border-top-color:var(--ok)}.timeline li.done::before{content:"\2713";display:grid;place-items:center;font:800 .72rem/1 var(--sans);color:var(--sheet);border-color:var(--ok);background:var(--ok)}
+@media (max-width:700px){.timeline{grid-template-columns:1fr}.timeline li{border-top:0;border-left:3px solid var(--rule)}.timeline li.done{border-left-color:var(--ok)}}
+.paypal-grid{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:start}@media (max-width:700px){.paypal-grid{grid-template-columns:1fr}}
+.readback{font:.92rem/1.75 var(--mono);background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;margin:0;overflow-wrap:anywhere;white-space:pre-line}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+figure{margin:0;text-align:center}figure img{background:#fff;padding:10px;border-radius:12px;border:1px solid var(--rule);box-shadow:var(--shadow)}figcaption{font-size:.8rem;color:var(--ink-2);margin-top:6px}
+.fine{font-size:.86rem;color:var(--ink-2)}
+.limits{margin-top:32px;font-size:.85rem;color:var(--ink-2);border-top:1px solid var(--rule);padding-top:16px}.limits,.status-line{max-width:90ch}.limits a{color:var(--link)}
+.questions{list-style:none;padding:0;margin:0}.question{border-top:1px solid var(--rule);padding:14px 0}.question .asked{margin:0 0 6px;font-weight:600}
+.question textarea{font-family:var(--sans);font-size:.95rem}.question .primary{margin-top:8px}
+.answer{margin:8px 0 4px;padding:10px 14px;border-radius:12px;background:var(--soft)}
+.revise{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end;margin-top:12px;padding:14px;border-radius:12px;background:var(--soft)}
+.revise label{display:grid;gap:4px;font-size:.85rem;font-weight:600;margin:0}.revise .reason{flex:1 1 100%}.revise .reason input{width:100%}.revise .num input{width:7em}.revise input{font-weight:400}
+.history{margin-top:24px}.history-list{list-style:none;padding:0;margin:0}.history-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--rule)}
+
+/* Client proof page: a receipt, money first, then every line with its quotes */
+.proof-main{max-width:860px}
+.proof-main h1{font-size:clamp(1.3rem,3.6vw,1.6rem);overflow-wrap:anywhere;margin:8px 0 18px;line-height:1.2}
+.banner{border-radius:var(--radius);padding:14px 18px;font-weight:600;margin:0 0 18px;border:1px solid transparent;animation:rise .4s var(--ease) both}
+.banner.match{background:var(--ok-bg);color:var(--ok)}.banner.changed{background:var(--bad-bg);color:var(--bad)}.banner.unknown{background:var(--warn-bg);color:var(--warn)}
+.banner .fine{color:inherit;opacity:.85;font-weight:500;margin:6px 0 0}
+.summary{position:relative;background:var(--sheet);border:1px solid var(--rule);border-radius:var(--radius) var(--radius) 4px 4px;padding:20px 22px 24px;margin:0 0 22px;animation:rise .4s var(--ease) both}
+.figures{display:flex;flex-wrap:wrap;gap:10px 0;margin:0}
+.figure{flex:1 1 auto;min-width:150px;padding:6px 16px 6px 0;border-right:1px dashed var(--rule-2);margin-right:16px}.figure:last-child{border-right:0}
+.figure dt{font-size:.72rem;color:var(--ink-2);font-weight:700;text-transform:uppercase;letter-spacing:.08em}.figure dd{margin:4px 0 0;font-size:clamp(1.35rem,2.6vw,1.85rem);white-space:nowrap;font-weight:780;letter-spacing:-.02em}
+.figure.ok dd{color:var(--ok)}.figure.refunded dd{color:var(--brand)}
+@media (max-width:600px){.figure{border-right:0;border-bottom:1px dashed var(--rule-2);margin:0;padding:8px 0}.figure:last-child{border-bottom:0}}
+.attention-title{margin:20px 0 6px;font-size:.74rem;text-transform:uppercase;letter-spacing:.09em}.attention{list-style:none;margin:0;padding:0}
+.attention li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 0;border-top:1px dashed var(--rule-2);font-weight:600}
+.attention a{color:var(--link);flex:1 1 260px}.attention .amount{font-weight:780;padding:0}
+.tag{display:inline-block;font-size:.76rem;font-weight:700;padding:1px 7px;border:1px solid currentColor;border-radius:4px}
+.tag.disputed,.tag.pending{color:var(--warn)}.tag.asked{color:var(--ink-2)}.tag.refunded{color:var(--ok)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.lines-title{font-size:1.1rem;margin:26px 0 12px}
+.proof-line{position:relative;border:0;border-top:1px solid var(--rule);background:transparent;padding:20px 8px 18px;margin:0;scroll-margin-top:90px}
+.proof-line:last-child{border-bottom:1px solid var(--rule)}
+.proof-line:target{box-shadow:0 0 0 2px var(--thread),0 0 0 6px color-mix(in srgb,var(--thread) 22%,transparent)}
+.proof-line h3{all:unset;display:flex;justify-content:space-between;gap:12px;font-weight:700;font-size:1.05rem;flex-wrap:wrap}
+.proof-line h3 span:last-child{font-variant-numeric:tabular-nums}
+.proof-line.refunded h3 span:last-child{text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:var(--ok);color:var(--ink-2)}
+.proof-line.refunded::after{content:"Refunded";position:absolute;right:20px;top:50px;font:800 .72rem/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--ok);padding:6px 9px;border:2px solid;border-radius:6px;transform:rotate(-6deg);opacity:.85;animation:stamp .4s var(--ease) .3s;pointer-events:none}
+.proof-line .actions{margin:14px 0 0;flex-wrap:nowrap}.proof-line .actions input{flex:1;min-width:0}
+@media (max-width:600px){.proof-line .actions{flex-wrap:wrap}.proof-line.refunded::after{display:none}}
+.diff{color:var(--bad);font-weight:600}
+.revisions{list-style:none;padding:0;margin:0}.revision{border-top:1px solid var(--rule);padding:12px 0 4px;margin:0 0 8px}
+.revision p{margin:4px 0}.rev-head{font-weight:700}.rev-total{font-weight:650;color:var(--ok)}.mono{font-family:var(--mono)}
+details.review-note summary{cursor:pointer;font-weight:600}.fold-text{margin:6px 0 0}
+.limit-note{margin:26px 0 0;padding:10px 14px;border:1px solid var(--rule);border-radius:10px;background:var(--sheet);font-family:var(--serif);font-style:italic;color:var(--ink-2)}
+details.about summary{cursor:pointer;font-weight:700;font-size:1.02rem}.about{margin-top:18px}
+.about[open] summary{margin-bottom:10px}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.thread path{stroke-dashoffset:0}}

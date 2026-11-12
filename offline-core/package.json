@@ -1,0 +1,1 @@
+{"name":"invoiceproof-offline-core","version":"0.1.0","private":true,"type":"module","scripts":{"test":"node --test core.test.ts","demo":"node demo.ts"},"engines":{"node":">=24"}}
